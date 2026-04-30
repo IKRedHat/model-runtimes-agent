@@ -19,7 +19,7 @@ Supervisor-driven orchestration for analysing model-car configurations and valid
 - **Quantization-aware decisioning** – the Decision Specialist now enforces a hardware/quantization compatibility matrix (AWQ, GPTQ, FP8, W4A16/W8A8, GGUF, bitsandbytes, etc.) against the detected GPU generation, flagging unsupported kernels and recommending safer variants before issuing a verdict.
 - **Serving-argument optimizer** – when the Decision Specialist emits `OPTIMIZED_SERVING_ARGUMENTS_JSON`, the Configuration Specialist applies it to `config-yaml/sample_modelcar_config.base.yaml` and writes the merged result to `config-yaml/sample_modelcar_config.generated.yaml` so QA/testing reuse the tuned flags without mutating the base template.
 - **Container metadata enrichment** – shells out to `skopeo inspect` to capture aggregate image size (GB) and supported CPU architecture per model; reports image size separately from VRAM.
-- **QA specialist** – stages your kubeconfig + OCI pull secret, launches the official `quay.io/opendatahub/opendatahub-tests:latest` container with Podman, streams `[QA]` logs, and reports `QA_OK` / `QA_ERROR:<reason>` back to the supervisor output.
+- **QA specialist** – applies `deployment-yamls/` templates to namespace `model-validation` (registry secret + per-model InferenceServices), deploys models in **ascending image size** order, watches readiness and key container logs, retries with higher memory and adjusted `--max-model-len` on bounded failures, and reports `QA_OK` / `QA_ERROR:<reason>` to the supervisor.
 - **Checklist-style responses** – specialists start with a short checklist of the steps they are taking before returning the report/results.
 - **Config bootstrap** – pass a bootstrap file at agent creation time so repeated prompts reuse cached requirements.
 
@@ -28,8 +28,7 @@ Supervisor-driven orchestration for analysing model-car configurations and valid
 - Python **3.12+**
 - A Google Gemini API key (`GEMINI_API_KEY`) for `langchain-google-genai`
 - `skopeo` available on `PATH` (for container metadata; falls back gracefully if missing)
-- `podman` available on `PATH` (to run the QA container; required if you want the QA specialist to execute)
-- Environment for QA: set `OCI_REGISTRY_PULL_SECRET` (base64 string for registry.redhat.io), ensure `KUBECONFIG` points to a reachable OpenShift cluster (defaults to `~/.kube/config`), and optionally set `VLLM_RUNTIME_IMAGE` if you want to override the runtime passed to ODH tests
+- Environment for QA: set `REGISTRY_HOST`, `OCI_REGISTRY_PULL_SECRET` (base64 `.dockerconfigjson`, or raw JSON which is encoded once), ensure `KUBECONFIG` points to a reachable cluster (defaults to `~/.kube/config`), optionally `VLLM_RUNTIME_IMAGE`, `KSERVE_SERVING_RUNTIME_NAME`, and `KSERVE_MODEL_FORMAT` to match your cluster’s ServingRuntime
 - Dependencies listed in `pyproject.toml`
 
 ## Installation
@@ -60,7 +59,8 @@ The app opens in your browser and prompts for the API key, pull secret, and YAML
 2. **Model-car file** – pass `--config /path/to/modelcar.yaml` (defaults to `config-yaml/sample_modelcar_config.yaml`; use the `*.base.yaml` template or any custom file).
 3. **LLM choice (optional)** – override `--model` if you want something other than `gemini-2.5-pro`.
 4. **QA prerequisites (only if you expect the supervisor to run QA):**
-   - `OCI_REGISTRY_PULL_SECRET` – base64 string accepted by `registry.redhat.io`.
+   - `REGISTRY_HOST` – OCI registry hostname (or set per run with `--registry-host` / inferrable as a single host from the model-car).
+   - `OCI_REGISTRY_PULL_SECRET` – base64 `.dockerconfigjson` (or raw JSON; encoded once for the Secret).
    - `KUBECONFIG` – path to a valid OpenShift kubeconfig (defaults to `~/.kube/config`).
    - `VLLM_RUNTIME_IMAGE` – optional override of the vLLM runtime image (otherwise the accelerator report supplies the correct image).
 
@@ -172,7 +172,7 @@ A typical end-to-end response therefore concludes with something like:
 > - Comparison: `model VRAM 18 GB vs GPU 80 GB`
 > - **GO**: one GPU is enough, leaving ample capacity in the cluster
 
-- When QA runs, look for `[QA] …` streaming logs and a closing `QA_OK` or `QA_ERROR:<reason>` line in the **QA Validation** section to confirm whether the official ODH regression suite agrees with the deployment decision.
+- When QA runs, look for `[QA] …` streaming logs and a closing `QA_OK:` or `QA_ERROR:<reason>` line in the **QA Validation** section to confirm KServe deployment validation results.
 - Use `--config` to point at any other YAML file (base template, generated overlay, or your own manifest).
 - `LLMAgent` also accepts a `bootstrap_config` parameter if you embed it in your own Python application.
 
@@ -187,23 +187,25 @@ Because the base template is never mutated you can always diff the generated ove
 
 ## QA Validation
 
-The QA Specialist executes the upstream Opendatahub model validation suite so the deployment story ends with automated regression coverage instead of just a theoretical GO/NO-GO. It only runs after the accelerator step reports a healthy cluster.
+The QA Specialist applies manifests under [`deployment-yamls/`](deployment-yamls/) (registry Secret + InferenceService template), writes substituted values for `REGISTRY_HOST`, `OCI_REGISTRY_PULL_SECRET`, and the vLLM runtime image, deploys **deployable** models from `info/deployment_matrix.json` that appear in `config-yaml/sample_modelcar_config.generated.yaml`, ordered by container image size (`model_size_gb`). It only runs after the accelerator step reports a healthy cluster.
 
-- The specialist stages your kubeconfig (`$KUBECONFIG` or `~/.kube/config`), OCI pull secret (`$OCI_REGISTRY_PULL_SECRET`), and `config-yaml/sample_modelcar_config.generated.yaml` into `/tmp/odh-tests-*`.
-- It then runs `podman run --rm quay.io/opendatahub/opendatahub-tests:latest ...` with the staged assets mounted in and streams logs back to the terminal prefixed with `[QA]`.
-- The final line starts with `QA_OK:` on success or `QA_ERROR:<code>` on failure (`QA_ERROR:KUBECONFIG_MISSING`, `QA_ERROR:TESTS_FAILED`, etc.), making it easy for the Decision Specialist to summarise next steps.
+- Uses allowlisted `oc` commands (`get`, `apply`, `create`, `delete`, `patch`, `logs`, `wait`, …) against namespace **`model-validation`**.
+- Waits for InferenceService Ready, inspects pod status for OOM / image pull failures, optionally tails `storage-initializer` and `kserve-container` logs, and retries with increased memory and halved `--max-model-len` up to a bounded number of attempts (except on image-pull/auth failures).
+- Final output begins with `QA_OK:` or `QA_ERROR:` (`QA_ERROR:REGISTRY_HOST_MISSING`, `QA_ERROR:KSERVE_DEPLOYMENT_FAILED`, etc.).
 
-When the accelerator metadata is healthy it emits a JSON blob containing `vllm_runtime_image`. The supervisor forwards this image string verbatim to the QA Specialist so pytest runs with the same container you intend to deploy. If you set the `VLLM_RUNTIME_IMAGE` environment variable it overrides the recommended value (useful for testing experimental runtime builds).
+When the accelerator metadata is healthy it emits JSON containing `vllm_runtime_image`. The supervisor forwards that image to the QA Specialist. You may override with `VLLM_RUNTIME_IMAGE` or `--vllm-runtime-image`.
 
 Environment variables:
 
 ```bash
-export OCI_REGISTRY_PULL_SECRET="..."        # REQUIRED: base64 pull secret accepted by registry.redhat.io
-export KUBECONFIG="$HOME/.kube/config"       # Optional override (defaults to ~/.kube/config)
-export VLLM_RUNTIME_IMAGE="quay.io/modh/..." # Optional override; if unset the accelerator-supplied image is used for QA
+export REGISTRY_HOST="registry.redhat.io"       # REQUIRED unless inferred as a single host from model-car
+export OCI_REGISTRY_PULL_SECRET="..."           # REQUIRED: base64 .dockerconfigjson (or raw JSON)
+export KUBECONFIG="$HOME/.kube/config"          # Optional (defaults to ~/.kube/config)
+export VLLM_RUNTIME_IMAGE="quay.io/modh/..."    # Optional; accelerator value used if unset
+export KSERVE_SERVING_RUNTIME_NAME="vllm-runtime" # Optional — must exist on cluster
+export KSERVE_MODEL_FORMAT="huggingface"          # Optional predictor.model.modelFormat.name
+export QA_PER_MODEL_TIMEOUT_S="900"               # Optional wait budget per model (seconds)
 ```
-
-Podman is mandatory for this step; if it is missing or you skip QA entirely the rest of the supervisor pipeline still works.
 
 ## Configuration Files
 
@@ -231,7 +233,7 @@ src/runtimes_dep_agent/
 │       ├── config_specialist.py
 │       ├── accelerator_specialist.py
 │       ├── decision_specialist.py
-│       └── qa_specialist.py      # ODH validation runner via Podman
+│       └── qa_specialist.py      # KServe deployment QA + qa_kserve pipeline
 ├── config/
 │   └── model_config.py           # YAML + skopeo helpers
 ├── execute_agent.py              # CLI entry point

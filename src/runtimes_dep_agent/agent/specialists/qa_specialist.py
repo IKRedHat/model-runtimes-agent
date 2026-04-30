@@ -1,44 +1,42 @@
-"""QA Specialist for running ODH validation tests."""
+"""QA Specialist: KServe InferenceService deployment validation (sequential, self-healing)."""
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
-import subprocess
-import tempfile
-import time
 from pathlib import Path
 from typing import Callable
 
+import yaml
 from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import tool
-import yaml
 
+from ...qa_kserve.pipeline import run_kserve_deployment_qa
+from ...utils.path_utils import detect_repo_root
 from . import SpecialistSpec
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-def _extract_registry_host(image: str) -> str | None:
-    """Extract registry host from an image reference (e.g., oci://registry/.../name:tag)."""
-    if not image:
-        return None
-    trimmed = image.strip()
-    for prefix in ("oci://", "docker://", "http://", "https://"):
-        if trimmed.startswith(prefix):
-            trimmed = trimmed[len(prefix):]
-            break
-    if not trimmed:
-        return None
-    # Host is the first path segment.
-    parts = trimmed.split("/", 1)
-    host = parts[0].strip()
-    return host or None
 
 
 def _infer_registry_from_modelcar(modelcar_cfg: dict) -> str | None:
     """Infer a single registry host from model-car image fields, if possible."""
+
+    def _extract_registry_host(image: str) -> str | None:
+        if not image:
+            return None
+        trimmed = image.strip()
+        for prefix in ("oci://", "docker://", "http://", "https://"):
+            if trimmed.startswith(prefix):
+                trimmed = trimmed[len(prefix) :]
+                break
+        if not trimmed:
+            return None
+        parts = trimmed.split("/", 1)
+        host = parts[0].strip()
+        return host or None
+
     if not isinstance(modelcar_cfg, dict):
         return None
     model_block = modelcar_cfg.get("model-car")
@@ -65,211 +63,127 @@ def _infer_registry_from_modelcar(modelcar_cfg: dict) -> str | None:
     return None
 
 
+def _resolve_registry_host(repo_root: Path) -> str | None:
+    explicit = os.environ.get("REGISTRY_HOST", "").strip()
+    if explicit:
+        return explicit
+    gen = repo_root / "config-yaml" / "sample_modelcar_config.generated.yaml"
+    base = repo_root / "config-yaml" / "sample_modelcar_config.base.yaml"
+    path = gen if gen.exists() else base
+    if not path.exists():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        return _infer_registry_from_modelcar(cfg or {})
+    except OSError:
+        return None
+
+
 def build_qa_specialist(
     llm: BaseChatModel,
     extract_text: Callable[[dict], str],
     precomputed_requirements: dict | None = None,
+    info_dir: Path | None = None,
 ) -> SpecialistSpec:
     """Return the QA specialist agent and the supervisor-facing tool."""
+    effective_info_dir = info_dir
+    _repo = detect_repo_root()
+
+    agents_md = _repo / "deployment-yamls" / "agents.md"
+    playbook_hint = ""
+    if agents_md.exists():
+        try:
+            text = agents_md.read_text(encoding="utf-8")
+            playbook_hint = (
+                "\n\nOperational playbook (excerpt from deployment-yamls/agents.md):\n"
+                + text[:6000]
+                + ("\n..." if len(text) > 6000 else "")
+            )
+        except OSError:
+            pass
 
     @tool
-    def run_odh_tests(
-        runtime_image: str,
-        gpu_provider: str,
-    ) -> str:
+    def run_kserve_deployment_qa_tool(runtime_image: str, gpu_provider: str) -> str:
         """
-        Run the ODH model validation test suite using a staged kubeconfig under /tmp.
-        :param runtime_image: The vLLM runtime image to use for testing.
+        Deploy deployable models to namespace model-validation using deployment-yamls templates:
+        apply OCI pull secret, then InferenceServices in ascending model image size order.
+        Monitors readiness and logs; retries with increased memory and reduced --max-model-len on failure.
+
+        Requires environment: KUBECONFIG, OCI_REGISTRY_PULL_SECRET (base64 .dockerconfigjson or raw JSON),
+        REGISTRY_HOST (or a single registry inferable from model-car). Optional: VLLM_RUNTIME_IMAGE,
+        KSERVE_SERVING_RUNTIME_NAME, KSERVE_MODEL_FORMAT, QA_PER_MODEL_TIMEOUT_S.
+
+        :param runtime_image: vLLM / runtime image used for annotations and validation (see accelerator JSON).
+        :param gpu_provider: e.g. NVIDIA, AMD — affects GPU resource requests.
         """
+        repo_root = detect_repo_root()
+        reg = _resolve_registry_host(repo_root)
+        oci = os.environ.get("OCI_REGISTRY_PULL_SECRET", "").strip()
 
-        image = "quay.io/opendatahub/opendatahub-tests:latest"
-        repo_root = Path.cwd()
-        generated_config = repo_root / "config-yaml" / "sample_modelcar_config.generated.yaml"
-        host_modelcar_path = generated_config
-        if not host_modelcar_path.exists():
-            fallback_config = repo_root / "config-yaml" / "sample_modelcar_config.base.yaml"
-            if fallback_config.exists():
-                print(
-                    f"[QA] Generated config not found at {generated_config}. "
-                    f"Falling back to base config: {fallback_config}",
-                    flush=True,
-                )
-                host_modelcar_path = fallback_config
-            else:
-                return f"QA_ERROR:MODELCAR_NOT_FOUND {generated_config}"
-        REGISTRY_PULL_SECRET = os.environ.get("OCI_REGISTRY_PULL_SECRET", "")
-        if not REGISTRY_PULL_SECRET:
-            msg = "QA_ERROR:OCI_PULL_SECRET_MISSING OCI registry pull secret not set in environment."
-            logger.error(msg)
-            print(f"[QA] {msg}", flush=True)
-            return msg
-        VLLM_RUNTIME_IMAGE = os.environ.get("VLLM_RUNTIME_IMAGE", runtime_image)
-
-        host_kubeconfig = os.environ.get(
-            "KUBECONFIG", os.path.expanduser("~/.kube/config")
-        )
-        host_kubeconfig_path = Path(host_kubeconfig)
-
-        if not host_kubeconfig_path.exists():
-            msg = f"QA_ERROR:KUBECONFIG_MISSING Host kubeconfig not found at {host_kubeconfig}"
-            logger.error(msg)
-            print(f"[QA] {msg}", flush=True)
-            return msg
-
-        tmp_dir = Path(tempfile.mkdtemp(prefix="odh-tests-"))
-        staged_kubeconfig = tmp_dir / "kubeconfig"
-        results_dir = tmp_dir / "results"
-
-        if not host_modelcar_path.exists():
-            return f"QA_ERROR:MODELCAR_NOT_FOUND {host_modelcar_path}"
-
-        tmp_modelcar_path = tmp_dir / "modelcar.yaml"
-        shutil.copy2(host_modelcar_path, tmp_modelcar_path)
-
-        try:
-            with open(tmp_modelcar_path, "r") as f:
-                modelcar_cfg = yaml.safe_load(f)
-        except Exception as e:
-            msg = f"QA_ERROR:MODELCAR_YAML_INVALID Failed to parse {tmp_modelcar_path}: {e}"
-            logger.error(msg)
-            print(f"[QA] {msg}", flush=True)
-            return msg
-
-        registry_host_override = os.environ.get("REGISTRY_HOST", "").strip()
-        registry_from_modelcar = registry_host_override or _infer_registry_from_modelcar(modelcar_cfg or {})
-        if not registry_from_modelcar:
-            msg = "QA_ERROR:MODELCAR_REGISTRY_UNDETERMINED Could not determine a single registry host from model-car config. Set REGISTRY_HOST to override."
-            logger.error(msg)
-            print(f"[QA] {msg}", flush=True)
-            return msg
-        try:
-            shutil.copy2(host_kubeconfig_path, staged_kubeconfig)
-            staged_kubeconfig.chmod(0o644)
-
-            results_dir.mkdir(parents=True, exist_ok=True)
-            results_dir.chmod(0o777)
-
-            cmd = [
-                "podman", "run", "--rm",
-                "-e", "KUBECONFIG=/home/odh/.kube/config",
-                "-e", f"OCI_REGISTRY_PULL_SECRET={REGISTRY_PULL_SECRET}",
-                "-v", f"{staged_kubeconfig}:/home/odh/.kube/config:Z",
-                "-v", f"{results_dir}:/home/odh/opendatahub-tests/results:Z",
-                "-v", f"{tmp_modelcar_path}:/home/odh/opendatahub-tests/modelcar.yaml:Z",
-                image,
-                "-vv",
-                "tests/model_serving/model_runtime/model_validation/test_modelvalidation.py",
-                "--model_car_yaml_path=/home/odh/opendatahub-tests/modelcar.yaml",
-                f"--vllm-runtime-image={VLLM_RUNTIME_IMAGE}",
-                f"--supported-accelerator-type={gpu_provider}",
-                f"--registry-host={registry_from_modelcar}",
-                "--snapshot-update",
-                "--log-file=/home/odh/opendatahub-tests/results/pytest-logs.log",
-            ]
-
-
-            logger.info("Running ODH tests with command: %s", " ".join(map(str, cmd)))
-            print("[QA] Starting ODH tests in container...", flush=True)
-
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+        if not reg:
+            msg = (
+                "QA_ERROR:REGISTRY_HOST_MISSING Set REGISTRY_HOST or ensure model-car lists "
+                "a single registry host."
             )
-
-            output_lines: list[str] = []
-            start = time.time()
-            timeout = 1800  # 30 minutes
-
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                output_lines.append(line)
-                print(f"[QA] {line}", end="", flush=True)
-
-                if time.time() - start > timeout:
-                    proc.kill()
-                    msg = (
-                        f"QA_ERROR:TIMEOUT QA test suite did not complete within "
-                        f"{timeout} seconds."
-                    )
-                    logger.error(msg)
-                    print(f"\n[QA] {msg}\n", flush=True)
-                    return msg
-
-            proc.wait()
-            full_output = "".join(output_lines)
-
-            # 5. Classify result for the supervisor / decision layer
-            if proc.returncode != 0:
-                logger.error("ODH tests exited with code %s", proc.returncode)
-
-                if "Invalid kube-config file" in full_output or "No configuration found" in full_output:
-                    return "QA_ERROR:KUBECONFIG_INVALID " + full_output
-                if "Trying to get client via new_client_from_config" in full_output:
-                    return "QA_ERROR:CLUSTER_UNREACHABLE " + full_output
-
-                return "QA_ERROR:TESTS_FAILED " + full_output
-
-            print("[QA] ODH tests completed successfully.\n", flush=True)
-            return "QA_OK:" + full_output
-
-        except FileNotFoundError as e:
-            logger.exception("podman not found when running ODH tests")
-            msg = f"QA_ERROR:RUNTIME_NOT_FOUND podman not found or not executable: {e}"
+            logger.error(msg)
             print(f"[QA] {msg}", flush=True)
             return msg
-        except Exception as e:
-            logger.exception("Unexpected error while running ODH tests")
-            msg = f"QA_ERROR:UNEXPECTED {e}"
+        if not oci:
+            msg = "QA_ERROR:OCI_PULL_SECRET_MISSING Set OCI_REGISTRY_PULL_SECRET (base64 .dockerconfigjson)."
+            logger.error(msg)
             print(f"[QA] {msg}", flush=True)
             return msg
+
+        return run_kserve_deployment_qa(
+            runtime_image=runtime_image,
+            gpu_provider=gpu_provider,
+            registry_host=reg,
+            oci_pull_secret=oci,
+            precomputed_requirements=precomputed_requirements,
+            info_dir=effective_info_dir,
+            repo_root=repo_root,
+        )
 
     prompt = (
-        "You are a QA Specialist responsible for validating machine learning model deployments "
-        "and configurations on OpenShift / Kubernetes.\n\n"
-        "You have access to a tool called `run_odh_tests` which runs the Opendatahub model "
-        "validation test suite inside a container, and streams logs to the console.\n\n"
-        "When a user asks to validate a deployment, or when you are invoked by the supervisor:\n"
-        "1. Before running the ODH test suite, the tool will automatically check for the "
-        "   'raw-model-validation' namespace. If it exists, it will be deleted using "
-        "   'oc delete ns raw-model-validation --force' to ensure a clean test environment.\n"
-        "2. Call `run_odh_tests`.\n"
-        "3. Inspect its output string.\n"
-        "4. Summarize whether QA passed or failed, and why.\n"
-        "5. Provide clear, concise recommendations for next steps (e.g., fix kubeconfig, fix cluster access, "
-        "   investigate failing tests, etc.).\n\n"
-        "Never request kubeconfig contents or secrets from the user. Work only with the logs and status provided "
-        "by the tool. \n"
-        "When you call 'run_odh_tests', you MUST provide the vLLM runtime image to test as the argument. \n"
-        "The vllm runtime image will be provided by the supervisor agent in your input request.\n"
+        "You are a QA Specialist responsible for validating ML model deployments on OpenShift / Kubernetes "
+        "using KServe InferenceServices.\n\n"
+        "You have a tool `run_kserve_deployment_qa_tool` that applies manifests under deployment-yamls/, "
+        "creates namespace model-validation if needed, applies the registry pull secret, deploys each "
+        "deployable model from deployment_matrix.json + generated model-car YAML in ascending container "
+        "image size order, waits for Ready, tails storage-initializer and kserve-container logs when useful, "
+        "and retries with higher memory and adjusted --max-model-len on recoverable failures.\n\n"
+        "When invoked by the supervisor:\n"
+        "1. Call `run_kserve_deployment_qa_tool` with the runtime_image from the supervisor (accelerator vLLM image) "
+        "and gpu_provider.\n"
+        "2. Inspect the returned string: it starts with QA_OK: or QA_ERROR:.\n"
+        "3. Summarize pass/fail per model and overall, without asking for kubeconfig or secret contents.\n"
+        + playbook_hint
     )
 
     agent = create_agent(
         llm,
-        tools=[run_odh_tests],
+        tools=[run_kserve_deployment_qa_tool],
         system_prompt=prompt,
     )
 
     @tool
     def analyze_qa_results(request: str, runtime_image: str, gpu_provider: str):
         """
-        Supervisor-facing entrypoint. The supervisor must pass:
-            - request: what to do (e.g. "run QA and summarize results")
-            - runtime_image: the vLLM runtime image to test
-            - gpu_provider: the GPU provider (e.g. "NVIDIA" or "AMD")
+        Supervisor-facing entrypoint. Pass:
+            - request: e.g. \"Run QA and summarize validation results.\"
+            - runtime_image: vLLM runtime image (from accelerator JSON / VLLM_RUNTIME_IMAGE).
+            - gpu_provider: e.g. NVIDIA or AMD.
         """
         qa_input = (
             f"{request}\n\n"
             f"RUNTIME_IMAGE::{runtime_image}\n"
             f"GPU_PROVIDER::{gpu_provider}\n"
-            "You MUST call `run_odh_tests` using this exact runtime image."
+            "You MUST call `run_kserve_deployment_qa_tool` with this runtime_image."
         )
 
         result = agent.invoke({"messages": [{"role": "user", "content": qa_input}]})
         return extract_text(result)
-
 
     analyze_qa_results.name = "analyze_qa_results"
 

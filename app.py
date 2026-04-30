@@ -646,11 +646,8 @@ def extract_qa_summary(agent_output: str) -> tuple[str, str]:
         if (re.match(r'^\[.*\]', line) or 
             re.match(r'^\d{4}-\d{2}-\d{2}', line) or
             re.match(r'^\[QA\]', line) or
-            line.startswith('podman') or
-            line.startswith('Running ODH') or
-            'INFO' in line or 'ERROR' in line or 'WARNING' in line or
-            'test_modelvalidation.py' in line or
-            'opendatahub-tests' in line):
+            line.startswith('Starting KServe deployment QA') or
+            'INFO' in line or 'ERROR' in line or 'WARNING' in line):
             continue
         # Skip empty lines at start
         if not cleaned_lines and not line:

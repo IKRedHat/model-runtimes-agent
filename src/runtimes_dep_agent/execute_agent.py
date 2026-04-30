@@ -85,6 +85,11 @@ def _parse_args() -> argparse.Namespace:
         help="vLLM runtime image override (falls back to VLLM_RUNTIME_IMAGE env var).",
     )
     parser.add_argument(
+        "--registry-host",
+        default=None,
+        help="OCI registry host for QA deploy (falls back to REGISTRY_HOST env var).",
+    )
+    parser.add_argument(
         "--oc-login",
         default=None,
         help=(
@@ -108,6 +113,8 @@ def _apply_env_overrides(args: argparse.Namespace) -> str:
         os.environ["OCI_REGISTRY_PULL_SECRET"] = args.oci_pull_secret
     if args.vllm_runtime_image:
         os.environ["VLLM_RUNTIME_IMAGE"] = args.vllm_runtime_image
+    if args.registry_host:
+        os.environ["REGISTRY_HOST"] = args.registry_host
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
