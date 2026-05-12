@@ -101,6 +101,31 @@ def post_chat_completions_smoke(
     """
     POST /v1/chat/completions (OpenAI-compatible). Returns (ok, detail_or_response_snippet).
     """
+def post_chat_completions_smoke(
+    base_url: str,
+    *,
+    model_id: str,
+    user_message: str,
+    max_tokens: int,
+    timeout_s: float,
+    verify_tls: bool,
+    log: list[str],
+) -> tuple[bool, str]:
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url)
+    blocked_hosts = {
+        "169.254.169.254", "metadata.google.internal",
+        "localhost", "127.0.0.1", "[::1]",
+    }
+    if parsed.hostname in blocked_hosts:
+        return False, f"Blocked internal/metadata host: {parsed.hostname}"
+    if parsed.hostname and (
+        parsed.hostname.startswith("10.") or
+        parsed.hostname.startswith("192.168.") or
+        parsed.hostname.startswith("172.16.")
+    ):
+        return False, f"Blocked private network: {parsed.hostname}"
+    
     endpoint = base_url.rstrip("/") + "/v1/chat/completions"
     payload: dict[str, Any] = {
         "model": model_id,
