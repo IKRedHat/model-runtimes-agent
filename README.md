@@ -180,7 +180,9 @@ The CLI runs **pre-flight** (`oc` + `skopeo`), optional **`oc login`**, streams 
 | `QA_SKIP_POST_DEPLOY_SMOKE` | Skip HTTP smoke after Ready. |
 | `QA_SKIP_SCALE_TO_ZERO` | Skip scale-to-zero patch. |
 | `QA_SKIP_NAMESPACE_DELETE` | Keep `model-validation` after success. |
-| `QA_SMOKE_TLS_VERIFY` | Enforce TLS on smoke requests (default behaviour is permissive). |
+| `QA_SMOKE_TLS_INSECURE` | Set to `1` for dev/test only — disables TLS verification on smoke HTTPS (default is **verified**). |
+| `QA_SMOKE_TLS_CA_FILE` | Optional path to a PEM CA bundle for smoke HTTPS (`ssl.create_default_context(cafile=...)`). |
+| `QA_SMOKE_TLS_VERIFY` | Legacy only: if this variable is **explicitly** set in the environment and is not truthy (`0` / `false`), smoke uses insecure TLS (same intent as older “verify off” docs). |
 | `QA_SMOKE_MODEL_ID`, `QA_SMOKE_USER_MESSAGE`, `QA_SMOKE_MAX_TOKENS`, `QA_SMOKE_TIMEOUT_S` | Smoke request tuning. |
 
 ### Streamlit / advanced
@@ -214,7 +216,7 @@ The CLI runs **pre-flight** (`oc` + `skopeo`), optional **`oc login`**, streams 
 
 ## Repository layout (source)
 
-```
+```text
 src/runtimes_dep_agent/
 ├── agent/llm_agent.py          # Supervisor
 ├── agent/specialists/          # Config, accelerator, decision, QA builders

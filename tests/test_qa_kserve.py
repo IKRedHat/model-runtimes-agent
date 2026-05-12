@@ -208,8 +208,52 @@ class TestArgsHelpers(unittest.TestCase):
 
 
 class TestLogsHint(unittest.TestCase):
-    def test_oom_hint(self) -> None:
+    def test_oom_hint_cuda_phrase(self) -> None:
         self.assertTrue(logs_hint_oom("CUDA out of memory"))
+
+    def test_oom_hint_not_substring_zoom(self) -> None:
+        self.assertFalse(logs_hint_oom("application zoomed past the bottleneck"))
+
+    def test_oom_hint_exit_code_137(self) -> None:
+        self.assertTrue(logs_hint_oom("Error: main container exited with code 137"))
+
+    def test_oom_hint_from_pod_json_oomkilled(self) -> None:
+        pod = {
+            "items": [
+                {
+                    "status": {
+                        "containerStatuses": [
+                            {
+                                "name": "kserve-container",
+                                "state": {"terminated": {"reason": "OOMKilled", "exitCode": 137}},
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        self.assertTrue(
+            logs_hint_oom("", pods_json_stdout=json.dumps(pod)),
+        )
+
+    def test_oom_hint_from_pod_json_exit_137(self) -> None:
+        pod = {
+            "items": [
+                {
+                    "status": {
+                        "initContainerStatuses": [
+                            {
+                                "name": "storage-initializer",
+                                "state": {"terminated": {"reason": "Error", "exitCode": 137}},
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        self.assertTrue(
+            logs_hint_oom("no oom in logs", pods_json_stdout=json.dumps(pod)),
+        )
 
 
 class TestOcAllowlist(unittest.TestCase):
@@ -225,6 +269,20 @@ class TestRemediationJson(unittest.TestCase):
         self.assertIsNotNone(obj)
         assert obj is not None
         self.assertEqual(obj.get("summary"), "x")
+
+    def test_parse_fenced_json_with_trailing_prose_inside_fence(self) -> None:
+        raw = (
+            "```json\n"
+            '{"summary": "y", "serving_arguments": [], '
+            '"resources": {"cpu_request": "1", "memory_request": "1Gi", '
+            '"cpu_limit": "2", "memory_limit": "2Gi", "gpu_count": 0}}\n'
+            "Thanks.\n"
+            "```"
+        )
+        obj = parse_llm_json(raw)
+        self.assertIsNotNone(obj)
+        assert obj is not None
+        self.assertEqual(obj.get("summary"), "y")
 
     def test_validate_clamps_gpu(self) -> None:
         raw = {

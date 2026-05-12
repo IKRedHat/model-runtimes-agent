@@ -9,10 +9,18 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from kubernetes.utils.quantity import parse_quantity
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
+
+# Conservative Kubernetes-style resource.Quantity: digits + optional fraction,
+# optional suffix (CPU n/u/m or binary SI Ki..Ei or decimal SI K..P).
+_K8S_QTY_WHITELIST = re.compile(
+    r"^\d+(\.\d+)?(?:[num]|(?:[KMGTPE])i|[KMGTPE])?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -41,25 +49,36 @@ def _clamp_gpu(n: int, cap: int) -> int:
 
 
 def _validate_quantity(value: str) -> bool:
-    if not value or not isinstance(value, str):
+    """True if value is a plausible Kubernetes resource quantity (CPU/memory)."""
+    if not isinstance(value, str):
         return False
     s = value.strip()
-    if len(s) > 32 or "\n" in s or "\r" in s:
+    if not s or len(s) > 32:
+        return False
+    if not s.isascii() or any(ord(c) < 32 for c in s):
+        return False
+    if _K8S_QTY_WHITELIST.fullmatch(s) is None:
+        return False
+    try:
+        parse_quantity(s)
+    except Exception:
         return False
     return True
 
 
 def parse_llm_json(content: str) -> dict[str, Any] | None:
     """Extract JSON object from model output (raw or fenced)."""
-    text = content.strip()
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    raw = content.strip()
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw, re.IGNORECASE)
     if fence:
-        text = fence.group(1)
+        text = fence.group(1).strip()
     else:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            text = text[start : end + 1]
+        text = raw
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    text = text[start : end + 1]
     try:
         obj = json.loads(text)
         return obj if isinstance(obj, dict) else None

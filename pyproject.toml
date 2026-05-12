@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "Apache-2.0"}
 dependencies = [
+    "kubernetes>=28.0.0",
     "langchain>=1.0.3",
     "langchain-core>=0.3.78",
     "langchain-google-genai>=3.2.0",

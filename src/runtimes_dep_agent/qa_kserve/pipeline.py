@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -60,6 +59,15 @@ def _append_report(parts: list[str], msg: str) -> None:
     print(f"[QA] {msg}", flush=True)
 
 
+def _return_last_qa_error(log: list[str]) -> str:
+    """Latest ``QA_ERROR:...`` line so early returns match the QA_OK/QA_ERROR contract."""
+    for i in range(len(log) - 1, -1, -1):
+        line = log[i].strip()
+        if line.startswith("QA_ERROR:"):
+            return line
+    return "QA_ERROR:UNKNOWN Check [QA] log output above."
+
+
 def _qa_progress(event: str, *fields: str) -> None:
     """
     Emit stable, parseable progress signals for UI/CLI.
@@ -88,26 +96,11 @@ def _apply_yaml_document(doc_yaml: str, log: list[str], *, timeout: float = 120)
         _append_report(log, f"QA_ERROR:YAML_INVALID {e}")
         return False
 
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".yaml",
-        delete=False,
-        encoding="utf-8",
-    ) as tmp:
-        tmp.write(doc_yaml)
-        path = tmp.name
-
-    try:
-        r = run_oc(["apply", "-f", path], timeout=timeout)
-        if r.returncode != 0:
-            _append_report(log, f"QA_ERROR:APPLY_FAILED {r.stderr or r.stdout}")
-            return False
-        return True
-    finally:
-        try:
-            Path(path).unlink(missing_ok=True)
-        except OSError:
-            pass
+    r = run_oc(["apply", "-f", "-"], stdin_input=doc_yaml, timeout=timeout)
+    if r.returncode != 0:
+        _append_report(log, f"QA_ERROR:APPLY_FAILED {r.stderr or r.stdout}")
+        return False
+    return True
 
 
 def _delete_isvc(name: str, log: list[str]) -> None:
@@ -432,7 +425,7 @@ def run_kserve_deployment_qa(
     _append_report(log, "Starting KServe deployment QA (sequential, small-to-large image).")
 
     if not _ensure_namespace(QA_NAMESPACE, log):
-        return "\n".join(log)
+        return _return_last_qa_error(log)
 
     docker_b64 = normalize_dockerconfig_b64(eff_secret)
     secret_yaml = build_registry_secret_yaml(
@@ -442,7 +435,7 @@ def run_kserve_deployment_qa(
         namespace=QA_NAMESPACE,
     )
     if not _apply_yaml_document(secret_yaml, log):
-        return "\n".join(log)
+        return _return_last_qa_error(log)
 
     skip_sr = os.environ.get("QA_SKIP_SERVING_RUNTIME_APPLY", "").strip().lower() in (
         "1",
@@ -472,7 +465,7 @@ def run_kserve_deployment_qa(
         _append_report(log, f"Applying ServingRuntime {serving_runtime} in {QA_NAMESPACE}.")
         _qa_progress("QA_SERVING_RUNTIME_APPLY", serving_runtime, QA_NAMESPACE)
         if not _apply_yaml_document(sr_body, log, timeout=180):
-            return "\n".join(log)
+            return _return_last_qa_error(log)
 
     template_text = load_inference_template(root)
 
@@ -606,7 +599,10 @@ def run_kserve_deployment_qa(
                 log_snip += log_si + "\n"
             if log_ks:
                 log_snip += log_ks + "\n"
-            if logs_hint_oom(log_snip):
+            pod_json_for_oom = (
+                rp.stdout if rp.returncode == 0 and (rp.stdout or "").strip() else None
+            )
+            if logs_hint_oom(log_snip, pods_json_stdout=pod_json_for_oom):
                 kind = "oom"
 
             if kind == "image_pull":
@@ -724,7 +720,11 @@ def run_kserve_deployment_qa(
                     smoke_timeout = float(os.environ.get("QA_SMOKE_TIMEOUT_S", "300"))
                 except ValueError:
                     smoke_timeout = 300.0
-                verify_tls = _env_truthy("QA_SMOKE_TLS_VERIFY")
+                tls_insecure = _env_truthy("QA_SMOKE_TLS_INSECURE") or (
+                    "QA_SMOKE_TLS_VERIFY" in os.environ
+                    and not _env_truthy("QA_SMOKE_TLS_VERIFY")
+                )
+                tls_ca_file = os.environ.get("QA_SMOKE_TLS_CA_FILE", "").strip() or None
                 if not base_url:
                     outcomes[-1] = f"{model_name}:SMOKE_FAIL:no_inference_url"
                     ok_model = False
@@ -744,8 +744,9 @@ def run_kserve_deployment_qa(
                         user_message=user_msg,
                         max_tokens=max_tok,
                         timeout_s=smoke_timeout,
-                        verify_tls=verify_tls,
                         log=log,
+                        tls_ca_file=tls_ca_file,
+                        tls_insecure=tls_insecure,
                     )
                     if smoke_ok:
                         _qa_progress(

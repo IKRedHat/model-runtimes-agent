@@ -24,7 +24,7 @@ Subprocess tooling may invoke only: `get`, `apply`, `create`, `delete`, `patch`,
    - Render `inference-service.yaml.template` with model image, args, resources.
    - `oc apply -f` the InferenceService.
    - Wait for Ready or failure.
-   - Resolve external/base URL (`status.url` / predictor URL / OpenShift Route), then **POST** `/v1/chat/completions` (OpenAI-style) unless `QA_SKIP_POST_DEPLOY_SMOKE=1`. TLS verification is **off** by default (like `curl -k`); set `QA_SMOKE_TLS_VERIFY=1` to enforce certs.
+   - Resolve external/base URL (`status.url` / predictor URL / OpenShift Route), then **POST** `/v1/chat/completions` (OpenAI-style) unless `QA_SKIP_POST_DEPLOY_SMOKE=1`. TLS uses the default trust store (**verified**) unless `QA_SMOKE_TLS_INSECURE=1` (dev/test only, disables verification) or `QA_SMOKE_TLS_CA_FILE` is set to a PEM bundle path. Legacy: `QA_SMOKE_TLS_VERIFY=0` still selects insecure mode when that variable is explicitly present in the environment.
    - **Scale to zero** (`minReplicas`/`maxReplicas` patch) unless `QA_SKIP_SCALE_TO_ZERO=1`.
 5. If every model succeeds (including smoke when enabled), **delete namespace** `model-validation` unless `QA_SKIP_NAMESPACE_DELETE=1`.
 

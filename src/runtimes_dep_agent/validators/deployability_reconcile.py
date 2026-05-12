@@ -133,12 +133,25 @@ def reconcile_deployment_matrix_json_file(
     matrix_path: str | Path,
     gpu_text: str,
 ) -> str | None:
-    """Load deployment_matrix.json, reconcile, rewrite; return new JSON string or None."""
-    path = Path(matrix_path)
-    if not path.exists() or not gpu_text.strip():
+    """Load deployment_matrix.json, reconcile, rewrite; return new JSON string or None.
+
+    ``matrix_path`` is validated before any read: the resolved path must end with a
+    file named exactly ``deployment_matrix.json`` so ``..`` segments cannot pivot to
+    arbitrary filenames (e.g. ``/etc/passwd``).
+    """
+    raw = Path(matrix_path).expanduser()
+    try:
+        resolved = raw.resolve()
+    except OSError:
+        return None
+    if resolved.name != "deployment_matrix.json":
+        return None
+    if not gpu_text.strip():
+        return None
+    if not resolved.is_file():
         return None
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        text = resolved.read_text(encoding="utf-8").strip()
         if not text:
             return None
         data = json.loads(text)

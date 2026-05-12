@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from runtimes_dep_agent.validators.deployability_reconcile import (
     cluster_supports_fp8_from_gpu_text,
     reconcile_deployment_matrix_entries,
+    reconcile_deployment_matrix_json_file,
 )
 
 
@@ -54,6 +58,35 @@ class TestDeployabilityReconcile(unittest.TestCase):
         rows = [{"model_name": "x", "deployable": False, "reason": "Wrong license"}]
         out = reconcile_deployment_matrix_entries(rows, GPU_H100)
         self.assertFalse(out[0]["deployable"])
+
+    def test_reconcile_json_file_rejects_non_matrix_basename(self) -> None:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(json.dumps([{"model_name": "x", "deployable": True, "reason": "ok"}]))
+            wrong_name = f.name
+        try:
+            self.assertIsNone(
+                reconcile_deployment_matrix_json_file(wrong_name, GPU_H100)
+            )
+        finally:
+            Path(wrong_name).unlink(missing_ok=True)
+
+    def test_reconcile_json_file_accepts_resolved_deployment_matrix_json(self) -> None:
+        rows = [
+            {
+                "model_name": "nvidia-nemotron",
+                "deployable": False,
+                "reason": NEMOTRON_REASON,
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "deployment_matrix.json"
+            path.write_text(json.dumps(rows), encoding="utf-8")
+            out = reconcile_deployment_matrix_json_file(path, GPU_H100)
+            self.assertIsNotNone(out)
+            parsed = json.loads(out)
+            self.assertTrue(parsed[0]["deployable"])
 
 
 if __name__ == "__main__":

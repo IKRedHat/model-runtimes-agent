@@ -17,6 +17,8 @@ import pandas as pd
 import json
 from pathlib import Path
 import selectors
+import shutil
+import uuid
 
 from runtimes_dep_agent.utils.path_utils import detect_repo_root
 from runtimes_dep_agent.preflight import run_preflight_checks, preflight_ok
@@ -376,12 +378,39 @@ if "agent_interrupted" not in st.session_state:
     st.session_state.agent_interrupted = False
 if "qa_skip_namespace_delete" not in st.session_state:
     st.session_state.qa_skip_namespace_delete = False
+if "agent_run_info_dir" not in st.session_state:
+    st.session_state.agent_run_info_dir = None
 
-# Helper: repo info/ — agent subprocess and UI always use the same path so IDE-opened files stay in sync.
-def _get_info_dir() -> Path:
+
+def _maybe_debug_info_symlink(root: Path, target: Path) -> None:
+    """Optional: repo_root/info_debug_latest -> this run dir when AGENT_RUN_INFO_SYMLINK is truthy (local IDE/debug)."""
+    raw = os.environ.get("AGENT_RUN_INFO_SYMLINK", "").strip().lower()
+    if raw not in ("1", "true", "yes", "y"):
+        return
+    link = root / "info_debug_latest"
+    try:
+        if link.is_symlink() or link.is_file():
+            link.unlink(missing_ok=True)
+        elif link.is_dir():
+            return
+        link.symlink_to(target.resolve(), target_is_directory=True)
+    except OSError:
+        pass
+
+
+def _ensure_run_info_dir() -> Path:
+    """Create a new per-run info directory under <repo>/.streamlit_agent_runs/; remove the previous run dir in this session."""
     root = detect_repo_root([Path(__file__).resolve()])
-    d = root / "info"
-    d.mkdir(parents=True, exist_ok=True)
+    base = root / ".streamlit_agent_runs"
+    base.mkdir(parents=True, exist_ok=True)
+    old = st.session_state.get("agent_run_info_dir")
+    if isinstance(old, Path) and old.is_dir():
+        shutil.rmtree(old, ignore_errors=True)
+    run_id = uuid.uuid4().hex
+    d = base / run_id
+    d.mkdir(parents=False, exist_ok=False)
+    st.session_state["agent_run_info_dir"] = d
+    _maybe_debug_info_symlink(root, d)
     return d
 
 
@@ -1114,25 +1143,11 @@ with st.sidebar:
     
     # Reset button
     if st.button("Reset", width='stretch'):
-        # Clear info folder files under <repo>/info
-        info_dir = _get_info_dir()
-        files_to_clear = [
-            "models_info.json",
-            "gpu_info.txt",
-            "deployment_info.txt",
-            "deployment_matrix.json",
-            "supervisor_summary.txt",
-        ]
-        for filename in files_to_clear:
-            file_path = info_dir / filename
-            if file_path.exists():
-                try:
-                    # Clear file content by writing empty string
-                    with open(file_path, 'w') as f:
-                        f.write("")
-                except Exception as e:
-                    st.error(f"Error clearing {filename}: {str(e)}")
-        
+        old_dir = st.session_state.pop("agent_run_info_dir", None)
+        if isinstance(old_dir, Path) and old_dir.is_dir():
+            shutil.rmtree(old_dir, ignore_errors=True)
+        st.session_state.agent_run_info_dir = None
+
         # Reset session state
         st.session_state.agent_started = False
         st.session_state.workflow_completed = False
@@ -1285,7 +1300,9 @@ if not st.session_state.agent_started:
                         os.environ["GEMINI_API_KEY"] = st.session_state.gemini_api_key
                     if st.session_state.oci_pull_secret:
                         os.environ["OCI_REGISTRY_PULL_SECRET"] = st.session_state.oci_pull_secret
-                    
+
+                    _ensure_run_info_dir()
+
                     temp_dir = tempfile.gettempdir()
                     config_path = os.path.join(temp_dir, "modelcar_config.yaml")
                     with open(config_path, 'wb') as tmp_file:
@@ -1916,7 +1933,9 @@ else:
             # Set agent start time for timeline tracking
             if st.session_state.agent_start_time is None:
                 st.session_state.agent_start_time = time.time()
-            
+            if st.session_state.get("agent_run_info_dir") is None:
+                _ensure_run_info_dir()
+
             placeholder = st.empty()
             with placeholder:
                 with st.spinner("Running supervisor agent..."):

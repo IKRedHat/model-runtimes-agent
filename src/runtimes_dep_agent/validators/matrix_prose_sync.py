@@ -21,7 +21,7 @@ def safe_matrix_entries(matrix: Any) -> list[dict[str, Any]]:
 
 
 def all_matrix_deployable(matrix: list[dict[str, Any]]) -> bool:
-    return bool(matrix) and all(e.get("deployable") for e in matrix)
+    return bool(matrix) and all(e.get("deployable") is True for e in matrix)
 
 
 def gpu_product_line(gpu_text: str) -> str:

@@ -8,6 +8,7 @@ import os
 import ssl
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from .oc_cli import run_oc
@@ -88,6 +89,47 @@ def _append(log: list[str], msg: str) -> None:
     print(f"[QA] {msg}", flush=True)
 
 
+def _smoke_ssl_context(
+    *,
+    tls_ca_file: str | None,
+    tls_insecure: bool,
+    log: list[str],
+) -> ssl.SSLContext | None:
+    """
+    SSL context for smoke HTTPS requests.
+
+    Default (both flags off / no CA file): ``None`` so ``urlopen`` uses the
+    interpreter default context (hostname + cert verification enabled).
+
+    ``QA_SMOKE_TLS_INSECURE`` (``tls_insecure``): dev/test only — disables verification
+    without calling ``ssl._create_unverified_context()``.
+
+    ``QA_SMOKE_TLS_CA_FILE`` (``tls_ca_file``): optional PEM bundle path.
+    """
+    if tls_insecure:
+        _append(
+            log,
+            "smoke TLS: insecure mode (QA_SMOKE_TLS_INSECURE) — cert verification disabled",
+        )
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    if tls_ca_file:
+        p = Path(tls_ca_file).expanduser()
+        try:
+            resolved = p.resolve()
+        except OSError:
+            resolved = p
+        if resolved.is_file():
+            return ssl.create_default_context(cafile=str(resolved))
+        _append(
+            log,
+            f"smoke TLS: CA file missing at {tls_ca_file!r}, using default trust store",
+        )
+    return None
+
+
 def post_chat_completions_smoke(
     base_url: str,
     *,
@@ -95,11 +137,16 @@ def post_chat_completions_smoke(
     user_message: str,
     max_tokens: int,
     timeout_s: float,
-    verify_tls: bool,
     log: list[str],
+    tls_ca_file: str | None = None,
+    tls_insecure: bool = False,
 ) -> tuple[bool, str]:
     """
     POST /v1/chat/completions (OpenAI-compatible). Returns (ok, detail_or_response_snippet).
+
+    TLS: verified against the default trust store unless ``tls_ca_file`` is set
+    (``ssl.create_default_context(cafile=...)``) or ``tls_insecure`` is True
+    (explicit dev-only; disables verification).
     """
 def post_chat_completions_smoke(
     base_url: str,
@@ -139,7 +186,7 @@ def post_chat_completions_smoke(
         method="POST",
         headers={"Content-Type": "application/json"},
     )
-    ctx = None if verify_tls else ssl._create_unverified_context()
+    ctx = _smoke_ssl_context(tls_ca_file=tls_ca_file, tls_insecure=tls_insecure, log=log)
     try:
         with urllib.request.urlopen(req, timeout=timeout_s, context=ctx) as resp:
             body = resp.read().decode("utf-8", errors="replace")

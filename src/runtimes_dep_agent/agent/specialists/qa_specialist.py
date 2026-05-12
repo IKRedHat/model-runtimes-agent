@@ -76,7 +76,7 @@ def _resolve_registry_host(repo_root: Path) -> str | None:
         with open(path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         return _infer_registry_from_modelcar(cfg or {})
-    except OSError:
+    except (OSError, yaml.YAMLError):
         return None
 
 
@@ -115,7 +115,7 @@ def build_qa_specialist(
         REGISTRY_HOST (or a single registry inferable from model-car). Optional: VLLM_RUNTIME_IMAGE,
         KSERVE_SERVING_RUNTIME_NAME, KSERVE_MODEL_FORMAT, QA_PER_MODEL_TIMEOUT_S, QA_MAX_GPU_COUNT,
         QA_SKIP_SERVING_RUNTIME_APPLY (set to 1 to skip applying serving-runtime.yaml.template when the runtime already exists).
-        Post-deploy: OpenAI-style smoke POST to /v1/chat/completions (skip with QA_SKIP_POST_DEPLOY_SMOKE=1), scale-to-zero (skip with QA_SKIP_SCALE_TO_ZERO=1), delete namespace on full success (skip with QA_SKIP_NAMESPACE_DELETE=1). Optional QA_SMOKE_MODEL_ID, QA_SMOKE_USER_MESSAGE, QA_SMOKE_MAX_TOKENS, QA_SMOKE_TIMEOUT_S, QA_SMOKE_TLS_VERIFY.
+        Post-deploy: OpenAI-style smoke POST to /v1/chat/completions (skip with QA_SKIP_POST_DEPLOY_SMOKE=1), scale-to-zero (skip with QA_SKIP_SCALE_TO_ZERO=1), delete namespace on full success (skip with QA_SKIP_NAMESPACE_DELETE=1). Optional QA_SMOKE_MODEL_ID, QA_SMOKE_USER_MESSAGE, QA_SMOKE_MAX_TOKENS, QA_SMOKE_TIMEOUT_S, QA_SMOKE_TLS_CA_FILE, QA_SMOKE_TLS_INSECURE (or legacy explicit QA_SMOKE_TLS_VERIFY=0).
 
         :param runtime_image: vLLM / runtime image used for annotations and validation (see accelerator JSON).
         :param gpu_provider: e.g. NVIDIA, AMD — affects GPU resource requests.

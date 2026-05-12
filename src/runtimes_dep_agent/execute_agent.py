@@ -316,7 +316,7 @@ def main() -> None:
 
         # Write summary to per-run info dir
         summary_path = info_dir / "supervisor_summary.txt"
-        with open(summary_path, "w") as f:
+        with open(summary_path, "w", encoding="utf-8") as f:
             f.write(output_text)
 
         sync_info_dir_prose_with_matrix(info_dir)

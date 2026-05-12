@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Literal
 
 FailureKind = Literal["none", "oom", "image_pull", "crashloop", "pending", "unknown"]
@@ -54,19 +55,87 @@ def classify_pod_json(pods_json_stdout: str) -> tuple[FailureKind, str]:
     return "none", ""
 
 
-def logs_hint_oom(log_text: str) -> bool:
-    """Lightweight check for OOM patterns in logs when status is unclear."""
-    lower = log_text.lower()
-    return any(
-        x in lower
-        for x in (
-            "out of memory",
-            "oom",
-            "cuda out of memory",
-            "killed process",
-            "signal 9",
-        )
-    )
+_BASE64ISH_LINE = re.compile(r"^[A-Za-z0-9+/=]{80,}$")
+
+
+def _oom_killed_from_pod_json(pods_json_stdout: str | None) -> bool:
+    """True if any container/initContainer has terminated OOMKilled or exitCode 137."""
+    if not pods_json_stdout or not pods_json_stdout.strip():
+        return False
+    try:
+        doc = json.loads(pods_json_stdout)
+    except json.JSONDecodeError:
+        return False
+    items = doc.get("items")
+    if not isinstance(items, list):
+        return False
+    for pod in items:
+        if not isinstance(pod, dict):
+            continue
+        status = pod.get("status")
+        if not isinstance(status, dict):
+            continue
+        for key in ("containerStatuses", "initContainerStatuses"):
+            for cs in status.get(key) or []:
+                if not isinstance(cs, dict):
+                    continue
+                state = cs.get("state")
+                if not isinstance(state, dict):
+                    continue
+                term = state.get("terminated")
+                if not isinstance(term, dict):
+                    continue
+                if term.get("reason") == "OOMKilled":
+                    return True
+                if term.get("exitCode") == 137:
+                    return True
+    return False
+
+
+def _log_lines_for_scan(log_text: str) -> str:
+    """Drop lines that are likely base64 / opaque blobs to reduce false positives."""
+    kept: list[str] = []
+    for line in log_text.splitlines():
+        s = line.strip()
+        if len(s) >= 80 and _BASE64ISH_LINE.match(s):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+# Log fallback: word-boundary / phrase patterns only (best-effort; prefer pod JSON).
+_LOG_OOM_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?<![A-Za-z0-9])out\s+of\s+memory(?![A-Za-z0-9])", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])cuda\s+out\s+of\s+memory(?![A-Za-z0-9])", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])torch\.cuda\.outofmemoryerror(?![A-Za-z0-9])", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])outofmemoryerror(?![A-Za-z0-9])", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])oomkilled(?![A-Za-z0-9])", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])\bkilled\s+process\b", re.IGNORECASE),
+    re.compile(
+        r"(?<![A-Za-z0-9])(?:exit(?:ed)?\s+code\s*137|exited\s+with\s+code\s*137|signal\s*[:#]?\s*9)\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def logs_hint_oom(log_text: str, *, pods_json_stdout: str | None = None) -> bool:
+    """
+    Best-effort OOM hint from pod status and/or container logs.
+
+    When ``pods_json_stdout`` is set (e.g. ``oc get pods -o json``), this prefers
+    structured signals: ``pod.status.containerStatuses[].state.terminated.reason ==
+    "OOMKilled"`` or ``exitCode == 137`` (and the same for ``initContainerStatuses``).
+
+    Log matching is intentionally conservative (phrases / bounded tokens, base64-like
+    lines skipped). For authoritative classification, use pod JSON and
+    ``classify_pod_json`` / ``containerStatuses[].state.terminated.reason``.
+    """
+    if pods_json_stdout is not None and _oom_killed_from_pod_json(pods_json_stdout):
+        return True
+    if not log_text or not log_text.strip():
+        return False
+    scan = _log_lines_for_scan(log_text)
+    return any(p.search(scan) for p in _LOG_OOM_PATTERNS)
 
 
 def summarize_tail(text: str, max_chars: int = 4000) -> str:
