@@ -1,0 +1,871 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1763866087.051777  564628 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+
+Supervisor Output
+-----------------
+INFO:runtimes_dep_agent.agent.specialists.qa_specialist:Running ODH tests with command: podman run --rm -e KUBECONFIG=/home/odh/.kube/config -v /tmp/odh-tests-t5glt3ea/kubeconfig:/home/odh/.kube/config:Z -v /tmp/odh-tests-t5glt3ea/results:/home/odh/opendatahub-tests/results:Z -v /tmp/odh-tests-t5glt3ea/modelcar.yaml:/home/odh/opendatahub-tests/modelcar.yaml:Z quay.io/opendatahub/opendatahub-tests:latest -vv tests/model_serving/model_runtime/model_validation/test_modelvalidation.py --model_car_yaml_path=/home/odh/opendatahub-tests/modelcar.yaml --vllm-runtime-image=quay.io/modh/vllm@sha256:db766445a1e3455e1bf7d16b008f8946fcbe9f277377af7abb81ae358805e7e2 --supported-accelerator-type=Nvidia --registry-host=registry.redhat.io --snapshot-update --log-file=/home/odh/opendatahub-tests/results/pytest-logs.log
+[QA] Starting ODH tests in container...
+[QA] 2025-11-23T02:48:17.938773 ocp_resources.resource INFO Trying to get client via new_client_from_config
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] 2025-11-23T02:48:18.257659 ocp_resources.resource INFO kind: DataScienceCluster api version: datasciencecluster.opendatahub.io/v2
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] 2025-11-23T02:48:18.381055 ocp_resources.resource INFO kind: DSCInitialization api version: dscinitialization.opendatahub.io/v2
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] 2025-11-23T02:48:18.445088 conftest INFO Running model registry tests against default namespace
+[QA] 2025-11-23T02:48:18.445601 ocp_resources.resource INFO kind: DataScienceCluster api version: datasciencecluster.opendatahub.io/v2
+[QA] /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]   warnings.warn(
+[QA] ============================= test session starts ==============================
+[QA] platform linux -- Python 3.13.9, pytest-9.0.1, pluggy-1.6.0 -- /home/odh/opendatahub-tests/.venv/bin/python
+[QA] cachedir: .pytest_cache
+[QA] metadata: {'Python': '3.13.9', 'Platform': 'Linux-6.17.7-300.fc43.x86_64-x86_64-with-glibc2.41', 'Packages': {'pytest': '9.0.1', 'pluggy': '1.6.0'}, 'Plugins': {'anyio': '4.11.0', 'asyncio': '1.3.0', 'dependency': '0.6.0', 'html': '4.1.1', 'jira': '0.3.22', 'metadata': '3.1.1', 'order': '1.3.0', 'progress': '1.4.0', 'testconfig': '0.2.0', 'xdist': '3.8.0', 'syrupy': '5.0.0'}}
+[QA] rootdir: /home/odh/opendatahub-tests
+[QA] configfile: pytest.ini
+[QA] plugins: anyio-4.11.0, asyncio-1.3.0, dependency-0.6.0, html-4.1.1, jira-0.3.22, metadata-3.1.1, order-1.3.0, progress-1.4.0, testconfig-0.2.0, xdist-3.8.0, syrupy-5.0.0
+[QA] asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+[QA] collecting ... collected 1 item
+[QA] 
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] 
+[QA] ------------------------- test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] -------------------------
+[QA] -------------------------------------------------------- SETUP --------------------------------------------------------
+[QA] 2025-11-23T02:48:18.554752 conftest INFO Executing session fixture: admin_client
+[QA] 2025-11-23T02:48:18.554954 ocp_resources.resource INFO Trying to get client via new_client_from_config
+[QA] 2025-11-23T02:48:18.563143 conftest INFO Executing session fixture: dsc_resource
+[QA] 2025-11-23T02:48:18.563323 ocp_resources.resource INFO kind: DataScienceCluster api version: datasciencecluster.opendatahub.io/v2
+[QA] 2025-11-23T02:48:18.723885 conftest INFO Executing package fixture: enabled_kserve_in_dsc
+[QA] 2025-11-23T02:48:18.758368 utilities.data_science_cluster_utils WARNING Component kserve was already set to managementState Managed
+[QA] 2025-11-23T02:48:18.758827 conftest INFO Executing session fixture: event_loop_policy
+[QA] 2025-11-23T02:48:18.759250 conftest INFO Executing session fixture: _syrupy_apply_ide_patches
+[QA] 2025-11-23T02:48:18.759658 conftest INFO Executing session fixture: tmp_path_factory
+[QA] 2025-11-23T02:48:18.759921 conftest INFO Executing session fixture: tests_tmp_dir
+[QA] 2025-11-23T02:48:18.762426 conftest INFO Executing session fixture: os_path_environment
+[QA] 2025-11-23T02:48:18.762782 conftest INFO Executing session fixture: tmpdir_factory
+[QA] 2025-11-23T02:48:18.763000 conftest INFO Executing session fixture: bin_directory
+[QA] 2025-11-23T02:48:18.763906 conftest INFO Executing session fixture: oc_binary_path
+[QA] 2025-11-23T02:48:18.764248 ocp_resources.resource INFO Trying to get client via new_client_from_config
+[QA] 2025-11-23T02:48:18.970119 ocp_resources.resource INFO kind: ConsoleCLIDownload api version: console.openshift.io/v1
+[QA] 2025-11-23T02:48:19.046937 utilities.infra INFO All oc console cli download links: ['https://downloads-openshift-console.apps.ragmawsgpu-pool-s29p9.aws.rh-ods.com/amd64/linux/oc.tar']
+[QA] 2025-11-23T02:48:19.047264 utilities.infra INFO Downloading archive using: url=https://downloads-openshift-console.apps.ragmawsgpu-pool-s29p9.aws.rh-ods.com/amd64/linux/oc.tar
+[QA] 2025-11-23T02:48:29.558788 utilities.infra INFO Extract the downloaded archive.
+[QA] 2025-11-23T02:48:29.653759 utilities.infra INFO Downloaded file: ['oc']
+[QA] 2025-11-23T02:48:29.665112 conftest INFO Executing session fixture: bin_directory_to_os_path
+[QA] 2025-11-23T02:48:29.665412 tests.conftest INFO OC binary path: /tmp/pytest-XEqwif2qfXTTL2UMsmdSJc/bin0/oc
+[QA] 2025-11-23T02:48:29.665465 tests.conftest INFO Adding /tmp/pytest-XEqwif2qfXTTL2UMsmdSJc/bin0 to $PATH
+[QA] 2025-11-23T02:48:29.665601 conftest INFO Executing session fixture: nodes
+[QA] 2025-11-23T02:48:32.265101 conftest INFO Executing session fixture: dsci_resource
+[QA] 2025-11-23T02:48:32.265279 ocp_resources.resource INFO kind: DSCInitialization api version: dscinitialization.opendatahub.io/v2
+[QA] 2025-11-23T02:48:32.303398 conftest INFO Executing session fixture: record_testsuite_property
+[QA] 2025-11-23T02:48:32.303869 conftest INFO Executing session fixture: junitxml_plugin
+[QA] 2025-11-23T02:48:32.304182 conftest INFO Executing session fixture: cluster_sanity_scope_session
+[QA] 2025-11-23T02:48:32.304402 utilities.infra INFO Check cluster sanity.
+[QA] 2025-11-23T02:48:32.304538 ocp_utilities.infra INFO Verify all nodes are in a healthy condition.
+[QA] 2025-11-23T02:48:32.481247 ocp_utilities.infra INFO Verify all nodes are schedulable.
+[QA] 2025-11-23T02:48:32.665433 ocp_resources DSCInitialization INFO Get DSCInitialization default-dsci status
+[QA] 2025-11-23T02:48:32.664890 timeout_sampler INFO Waiting for 120 seconds [0:02:00], retry every 5 seconds. (Function: utilities.infra.wait_for_dsci_status_ready  Kwargs: {'dsci_resource': <ocp_resources.dsc_initialization.DSCInitialization object at 0x7f00bededa90>})
+[QA] 2025-11-23T02:48:32.665243 utilities.infra INFO Wait for DSCI default-dsci to be in Ready status.
+[QA] 2025-11-23T02:48:32.699843 ocp_resources DataScienceCluster INFO Get DataScienceCluster default-dsc status
+[QA] 2025-11-23T02:48:32.699430 timeout_sampler INFO Elapsed time: 0.00044083595275878906 [0:00:00.000441]
+[QA] 2025-11-23T02:48:32.699650 timeout_sampler INFO Waiting for 120 seconds [0:02:00], retry every 5 seconds. (Function: utilities.infra.wait_for_dsc_status_ready  Kwargs: {'dsc_resource': <ocp_resources.data_science_cluster.DataScienceCluster object at 0x7f00bedefb10>})
+[QA] 2025-11-23T02:48:32.699751 utilities.infra INFO Wait for DSC default-dsc are Ready.
+[QA] ERROR
+[QA] _ ERROR at setup of TestVLLMModelCarRaw.test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] _
+[QA] 
+[QA] fixturedef = <FixtureDef argname='cluster_sanity_scope_session' scope='session' baseid='tests'>
+[QA] request = <SubRequest 'cluster_sanity_scope_session' for <Function test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]>>
+[QA] 
+[QA]     @pytest.hookimpl(wrapper=True)
+[QA]     def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+[QA]         asyncio_mode = _get_asyncio_mode(request.config)
+[QA]         if not _is_asyncio_fixture_function(fixturedef.func):
+[QA]             if asyncio_mode == Mode.STRICT:
+[QA]                 # Ignore async fixtures without explicit asyncio mark in strict mode
+[QA]                 # This applies to pytest_trio fixtures, for example
+[QA] >               return (yield)
+[QA]                         ^^^^^
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/pytest_asyncio/plugin.py:728: 
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] tests/conftest.py:625: in cluster_sanity_scope_session
+[QA]     verify_cluster_sanity(
+[QA] utilities/infra.py:1108: in verify_cluster_sanity
+[QA]     wait_for_dsc_status_ready(dsc_resource=dsc_resource)
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:276: in wrapper
+[QA]     for sample in TimeoutSampler(
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] 
+[QA] self = <timeout_sampler.TimeoutSampler object at 0x7f00c0d5b410>
+[QA] 
+[QA]     def __iter__(self) -> Any:
+[QA]         """
+[QA]         Call `func` and yield the result, or raise an exception on timeout.
+[QA]     
+[QA]         Yields:
+[QA]             any: Return value from `func`
+[QA]     
+[QA]         Raises:
+[QA]             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
+[QA]         """
+[QA]         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
+[QA]         if self.print_log:
+[QA]             log = (
+[QA]                 f"Waiting for {self.wait_timeout} seconds"
+[QA]                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+[QA]                 f" {self.sleep} seconds."
+[QA]             )
+[QA]     
+[QA]             if self.print_func_log:
+[QA]                 log += f" ({self._func_log})"
+[QA]     
+[QA]             LOGGER.info(log)
+[QA]     
+[QA]         last_exp = None
+[QA]         elapsed_time = None
+[QA]         while timeout_watch.remaining_time() > 0:
+[QA]             try:
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]                 yield self.func(*self.func_args, **self.func_kwargs)
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             except Exception as exp:
+[QA]                 last_exp = exp
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]     
+[QA]                 if not self._should_ignore_exception(exp=last_exp):
+[QA]                     raise TimeoutExpiredError(
+[QA]                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
+[QA]                     )
+[QA]     
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             finally:
+[QA]                 if self.print_log and elapsed_time:
+[QA]                     LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
+[QA]     
+[QA] >       raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
+[QA] E       timeout_sampler.TimeoutExpiredError: Timed Out: 120
+[QA] E       Function: utilities.infra.wait_for_dsc_status_ready  Kwargs: {'dsc_resource': <ocp_resources.data_science_cluster.DataScienceCluster object at 0x7f00bedefb10>}
+[QA] E       Last exception: ResourceNotReadyError: DSC default-dsc is not ready.
+[QA] E       Current status: {'components': {'aipipelines': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Pipelines',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/pipelines',
+[QA] E        'version': '2.5.0'}]},
+[QA] E        'dashboard': {'managementState': 'Managed'},
+[QA] E        'feastoperator': {'managementState': 'Removed'},
+[QA] E        'kserve': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KServe',
+[QA] E        'repoUrl': 'https://github.com/kserve/kserve/',
+[QA] E        'version': 'v0.14.0'}]},
+[QA] E        'kueue': {'managementState': 'Removed'},
+[QA] E        'llamastackoperator': {'managementState': 'Removed'},
+[QA] E        'modelregistry': {'managementState': 'Managed',
+[QA] E        'registriesNamespace': 'rhoai-model-registries',
+[QA] E        'releases': [{'name': 'Google ML Metadata',
+[QA] E        'repoUrl': 'https://github.com/google/ml-metadata',
+[QA] E        'version': 'v1.14.0'},
+[QA] E                     {'name': 'Kubeflow Model Registry',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/model-registry',
+[QA] E        'version': 'latest'},
+[QA] E                     {'name': 'Open Data Hub Model Registry Operator',
+[QA] E        'repoUrl': 'https://github.com/opendatahub-io/model-registry-operator',
+[QA] E        'version': 'latest'}]},
+[QA] E        'ray': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KubeRay',
+[QA] E        'repoUrl': 'https://github.com/ray-project/kuberay',
+[QA] E        'version': '1.4.2'}]},
+[QA] E        'trainingoperator': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Training Operator',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/trainer',
+[QA] E        'version': '1.9.0'}]},
+[QA] E        'trustyai': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'TrustyAI operator',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI service',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-explainability',
+[QA] E        'version': 'v0.28.0'},
+[QA] E                     {'name': 'TrustyAI LMEval driver',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI LMEval job',
+[QA] E        'repoUrl': 'https://github.com/EleutherAI/lm-evaluation-harness',
+[QA] E        'version': 'v0.4.8'},
+[QA] E                     {'name': 'TrustyAI Guardrails orchestrator',
+[QA] E        'repoUrl': 'https://github.com/foundation-model-stack/fms-guardrails-orchestrator',
+[QA] E        'version': '0.9.4'},
+[QA] E                     {'name': 'TrustyAI builtin detectors',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/guardrails-regex-detector',
+[QA] E        'version': 'v0.2.0'},
+[QA] E                     {'name': 'TrustyAI sidecar gateway',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/vllm-orchestrator-gateway',
+[QA] E        'version': 'v0.2.1'}]},
+[QA] E        'workbenches': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Notebook Controller',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/kubeflow',
+[QA] E        'version': '1.10.0'}],
+[QA] E        'workbenchNamespace': 'rhods-notebooks'}},
+[QA] E        'conditions': [{'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'Ready'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'observedGeneration': 43,
+[QA] E        'status': 'True',
+[QA] E        'type': 'ProvisioningSucceeded'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'ComponentsReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'AIPipelinesReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'DashboardReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'FeastOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'KserveReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] TEST: TestVLLMModelCarRaw.test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] [setup] STATUS: ERROR
+[QA] 2025-11-23T02:50:35.114118 conftest ERROR fixturedef = <FixtureDef argname='cluster_sanity_scope_session' scope='session' baseid='tests'>
+[QA] request = <SubRequest 'cluster_sanity_scope_session' for <Function test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]>>
+[QA] 
+[QA]     @pytest.hookimpl(wrapper=True)
+[QA]     def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+[QA]         asyncio_mode = _get_asyncio_mode(request.config)
+[QA]         if not _is_asyncio_fixture_function(fixturedef.func):
+[QA]             if asyncio_mode == Mode.STRICT:
+[QA]                 # Ignore async fixtures without explicit asyncio mark in strict mode
+[QA]                 # This applies to pytest_trio fixtures, for example
+[QA] >               return (yield)
+[QA]                         ^^^^^
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/pytest_asyncio/plugin.py:728: 
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] tests/conftest.py:625: in cluster_sanity_scope_session
+[QA]     verify_cluster_sanity(
+[QA] utilities/infra.py:1108: in verify_cluster_sanity
+[QA]     wait_for_dsc_status_ready(dsc_resource=dsc_resource)
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:276: in wrapper
+[QA]     for sample in TimeoutSampler(
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] 
+[QA] self = <timeout_sampler.TimeoutSampler object at 0x7f00c0d5b410>
+[QA] 
+[QA]     def __iter__(self) -> Any:
+[QA]         """
+[QA]         Call `func` and yield the result, or raise an exception on timeout.
+[QA]     
+[QA]         Yields:
+[QA]             any: Return value from `func`
+[QA]     
+[QA]         Raises:
+[QA]             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
+[QA]         """
+[QA]         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
+[QA]         if self.print_log:
+[QA]             log = (
+[QA]                 f"Waiting for {self.wait_timeout} seconds"
+[QA]                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+[QA]                 f" {self.sleep} seconds."
+[QA]             )
+[QA]     
+[QA]             if self.print_func_log:
+[QA]                 log += f" ({self._func_log})"
+[QA]     
+[QA]             LOGGER.info(log)
+[QA]     
+[QA]         last_exp = None
+[QA]         elapsed_time = None
+[QA]         while timeout_watch.remaining_time() > 0:
+[QA]             try:
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]                 yield self.func(*self.func_args, **self.func_kwargs)
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             except Exception as exp:
+[QA]                 last_exp = exp
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]     
+[QA]                 if not self._should_ignore_exception(exp=last_exp):
+[QA]                     raise TimeoutExpiredError(
+[QA]                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
+[QA]                     )
+[QA]     
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             finally:
+[QA]                 if self.print_log and elapsed_time:
+[QA]                     LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
+[QA]     
+[QA] >       raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
+[QA] E       timeout_sampler.TimeoutExpiredError: Timed Out: 120
+[QA] E       Function: utilities.infra.wait_for_dsc_status_ready  Kwargs: {'dsc_resource': <ocp_resources.data_science_cluster.DataScienceCluster object at 0x7f00bedefb10>}
+[QA] E       Last exception: ResourceNotReadyError: DSC default-dsc is not ready.
+[QA] E       Current status: {'components': {'aipipelines': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Pipelines',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/pipelines',
+[QA] E        'version': '2.5.0'}]},
+[QA] E        'dashboard': {'managementState': 'Managed'},
+[QA] E        'feastoperator': {'managementState': 'Removed'},
+[QA] E        'kserve': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KServe',
+[QA] E        'repoUrl': 'https://github.com/kserve/kserve/',
+[QA] E        'version': 'v0.14.0'}]},
+[QA] E        'kueue': {'managementState': 'Removed'},
+[QA] E        'llamastackoperator': {'managementState': 'Removed'},
+[QA] E        'modelregistry': {'managementState': 'Managed',
+[QA] E        'registriesNamespace': 'rhoai-model-registries',
+[QA] E        'releases': [{'name': 'Google ML Metadata',
+[QA] E        'repoUrl': 'https://github.com/google/ml-metadata',
+[QA] E        'version': 'v1.14.0'},
+[QA] E                     {'name': 'Kubeflow Model Registry',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/model-registry',
+[QA] E        'version': 'latest'},
+[QA] E                     {'name': 'Open Data Hub Model Registry Operator',
+[QA] E        'repoUrl': 'https://github.com/opendatahub-io/model-registry-operator',
+[QA] E        'version': 'latest'}]},
+[QA] E        'ray': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KubeRay',
+[QA] E        'repoUrl': 'https://github.com/ray-project/kuberay',
+[QA] E        'version': '1.4.2'}]},
+[QA] E        'trainingoperator': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Training Operator',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/trainer',
+[QA] E        'version': '1.9.0'}]},
+[QA] E        'trustyai': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'TrustyAI operator',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI service',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-explainability',
+[QA] E        'version': 'v0.28.0'},
+[QA] E                     {'name': 'TrustyAI LMEval driver',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI LMEval job',
+[QA] E        'repoUrl': 'https://github.com/EleutherAI/lm-evaluation-harness',
+[QA] E        'version': 'v0.4.8'},
+[QA] E                     {'name': 'TrustyAI Guardrails orchestrator',
+[QA] E        'repoUrl': 'https://github.com/foundation-model-stack/fms-guardrails-orchestrator',
+[QA] E        'version': '0.9.4'},
+[QA] E                     {'name': 'TrustyAI builtin detectors',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/guardrails-regex-detector',
+[QA] E        'version': 'v0.2.0'},
+[QA] E                     {'name': 'TrustyAI sidecar gateway',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/vllm-orchestrator-gateway',
+[QA] E        'version': 'v0.2.1'}]},
+[QA] E        'workbenches': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Notebook Controller',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/kubeflow',
+[QA] E        'version': '1.10.0'}],
+[QA] E        'workbenchNamespace': 'rhods-notebooks'}},
+[QA] E        'conditions': [{'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'Ready'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'observedGeneration': 43,
+[QA] E        'status': 'True',
+[QA] E        'type': 'ProvisioningSucceeded'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'ComponentsReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'AIPipelinesReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'DashboardReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'FeastOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'KserveReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'KueueReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'LlamaStackOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelControllerReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelRegistryReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'RayReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'TrainingOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': '0/1 deployments ready',
+[QA] E        'reason': 'DeploymentsNotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'TrustyAIReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'WorkbenchesReady'}],
+[QA] E        'observedGeneration': 30,
+[QA] E        'phase': 'Not Ready',
+[QA] E        'release': {'name': 'OpenShift AI Self-Managed', 'version': '3.0.0'}}.
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:179: TimeoutExpiredError
+[QA] ------------------------------------------------------- TEARDOWN -------------------------------------------------------
+[QA] 
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'KueueReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'LlamaStackOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelControllerReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelRegistryReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'RayReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'TrainingOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': '0/1 deployments ready',
+[QA] E        'reason': 'DeploymentsNotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'TrustyAIReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'WorkbenchesReady'}],
+[QA] E        'observedGeneration': 30,
+[QA] E        'phase': 'Not Ready',
+[QA] E        'release': {'name': 'OpenShift AI Self-Managed', 'version': '3.0.0'}}.
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:179: TimeoutExpiredError
+[QA] _ 1 of 1 completed, 0 Pass, 0 Fail, 0 Skip, 0 XPass, 0 XFail, 1 Error, 0 ReRun _
+[QA] =================== 7 warnings, 1 error in 136.58s (0:02:16) ===================
+[QA] 
+[QA] ==================================== ERRORS ====================================
+[QA] _ ERROR at setup of TestVLLMModelCarRaw.test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] _
+[QA] 
+[QA] fixturedef = <FixtureDef argname='cluster_sanity_scope_session' scope='session' baseid='tests'>
+[QA] request = <SubRequest 'cluster_sanity_scope_session' for <Function test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]>>
+[QA] 
+[QA]     @pytest.hookimpl(wrapper=True)
+[QA]     def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+[QA]         asyncio_mode = _get_asyncio_mode(request.config)
+[QA]         if not _is_asyncio_fixture_function(fixturedef.func):
+[QA]             if asyncio_mode == Mode.STRICT:
+[QA]                 # Ignore async fixtures without explicit asyncio mark in strict mode
+[QA]                 # This applies to pytest_trio fixtures, for example
+[QA] >               return (yield)
+[QA]                         ^^^^^
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/pytest_asyncio/plugin.py:728: 
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] tests/conftest.py:625: in cluster_sanity_scope_session
+[QA]     verify_cluster_sanity(
+[QA] utilities/infra.py:1108: in verify_cluster_sanity
+[QA]     wait_for_dsc_status_ready(dsc_resource=dsc_resource)
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:276: in wrapper
+[QA]     for sample in TimeoutSampler(
+[QA] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[QA] 
+[QA] self = <timeout_sampler.TimeoutSampler object at 0x7f00c0d5b410>
+[QA] 
+[QA]     def __iter__(self) -> Any:
+[QA]         """
+[QA]         Call `func` and yield the result, or raise an exception on timeout.
+[QA]     
+[QA]         Yields:
+[QA]             any: Return value from `func`
+[QA]     
+[QA]         Raises:
+[QA]             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
+[QA]         """
+[QA]         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
+[QA]         if self.print_log:
+[QA]             log = (
+[QA]                 f"Waiting for {self.wait_timeout} seconds"
+[QA]                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+[QA]                 f" {self.sleep} seconds."
+[QA]             )
+[QA]     
+[QA]             if self.print_func_log:
+[QA]                 log += f" ({self._func_log})"
+[QA]     
+[QA]             LOGGER.info(log)
+[QA]     
+[QA]         last_exp = None
+[QA]         elapsed_time = None
+[QA]         while timeout_watch.remaining_time() > 0:
+[QA]             try:
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]                 yield self.func(*self.func_args, **self.func_kwargs)
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             except Exception as exp:
+[QA]                 last_exp = exp
+[QA]                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
+[QA]     
+[QA]                 if not self._should_ignore_exception(exp=last_exp):
+[QA]                     raise TimeoutExpiredError(
+[QA]                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
+[QA]                     )
+[QA]     
+[QA]                 time.sleep(self.sleep)
+[QA]                 elapsed_time = None
+[QA]     
+[QA]             finally:
+[QA]                 if self.print_log and elapsed_time:
+[QA]                     LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
+[QA]     
+[QA] >       raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
+[QA] E       timeout_sampler.TimeoutExpiredError: Timed Out: 120
+[QA] E       Function: utilities.infra.wait_for_dsc_status_ready  Kwargs: {'dsc_resource': <ocp_resources.data_science_cluster.DataScienceCluster object at 0x7f00bedefb10>}
+[QA] E       Last exception: ResourceNotReadyError: DSC default-dsc is not ready.
+[QA] E       Current status: {'components': {'aipipelines': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Pipelines',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/pipelines',
+[QA] E        'version': '2.5.0'}]},
+[QA] E        'dashboard': {'managementState': 'Managed'},
+[QA] E        'feastoperator': {'managementState': 'Removed'},
+[QA] E        'kserve': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KServe',
+[QA] E        'repoUrl': 'https://github.com/kserve/kserve/',
+[QA] E        'version': 'v0.14.0'}]},
+[QA] E        'kueue': {'managementState': 'Removed'},
+[QA] E        'llamastackoperator': {'managementState': 'Removed'},
+[QA] E        'modelregistry': {'managementState': 'Managed',
+[QA] E        'registriesNamespace': 'rhoai-model-registries',
+[QA] E        'releases': [{'name': 'Google ML Metadata',
+[QA] E        'repoUrl': 'https://github.com/google/ml-metadata',
+[QA] E        'version': 'v1.14.0'},
+[QA] E                     {'name': 'Kubeflow Model Registry',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/model-registry',
+[QA] E        'version': 'latest'},
+[QA] E                     {'name': 'Open Data Hub Model Registry Operator',
+[QA] E        'repoUrl': 'https://github.com/opendatahub-io/model-registry-operator',
+[QA] E        'version': 'latest'}]},
+[QA] E        'ray': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'KubeRay',
+[QA] E        'repoUrl': 'https://github.com/ray-project/kuberay',
+[QA] E        'version': '1.4.2'}]},
+[QA] E        'trainingoperator': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Training Operator',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/trainer',
+[QA] E        'version': '1.9.0'}]},
+[QA] E        'trustyai': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'TrustyAI operator',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI service',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-explainability',
+[QA] E        'version': 'v0.28.0'},
+[QA] E                     {'name': 'TrustyAI LMEval driver',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA] E        'version': 'v1.37.0'},
+[QA] E                     {'name': 'TrustyAI LMEval job',
+[QA] E        'repoUrl': 'https://github.com/EleutherAI/lm-evaluation-harness',
+[QA] E        'version': 'v0.4.8'},
+[QA] E                     {'name': 'TrustyAI Guardrails orchestrator',
+[QA] E        'repoUrl': 'https://github.com/foundation-model-stack/fms-guardrails-orchestrator',
+[QA] E        'version': '0.9.4'},
+[QA] E                     {'name': 'TrustyAI builtin detectors',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/guardrails-regex-detector',
+[QA] E        'version': 'v0.2.0'},
+[QA] E                     {'name': 'TrustyAI sidecar gateway',
+[QA] E        'repoUrl': 'https://github.com/trustyai-explainability/vllm-orchestrator-gateway',
+[QA] E        'version': 'v0.2.1'}]},
+[QA] E        'workbenches': {'managementState': 'Managed',
+[QA] E        'releases': [{'name': 'Kubeflow Notebook Controller',
+[QA] E        'repoUrl': 'https://github.com/kubeflow/kubeflow',
+[QA] E        'version': '1.10.0'}],
+[QA] E        'workbenchNamespace': 'rhods-notebooks'}},
+[QA] E        'conditions': [{'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'Ready'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'observedGeneration': 43,
+[QA] E        'status': 'True',
+[QA] E        'type': 'ProvisioningSucceeded'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Some components are not ready: trustyai',
+[QA] E        'reason': 'NotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'ComponentsReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'AIPipelinesReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'DashboardReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'FeastOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'KserveReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'KueueReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': 'Component ManagementState is set to Removed',
+[QA] E        'reason': 'Removed',
+[QA] E        'severity': 'Info',
+[QA] E        'status': 'False',
+[QA] E        'type': 'LlamaStackOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelControllerReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'ModelRegistryReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'RayReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'TrainingOperatorReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'message': '0/1 deployments ready',
+[QA] E        'reason': 'DeploymentsNotReady',
+[QA] E        'status': 'False',
+[QA] E        'type': 'TrustyAIReady'},
+[QA] E                       {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA] E        'status': 'True',
+[QA] E        'type': 'WorkbenchesReady'}],
+[QA] E        'observedGeneration': 30,
+[QA] E        'phase': 'Not Ready',
+[QA] E        'release': {'name': 'OpenShift AI Self-Managed', 'version': '3.0.0'}}.
+[QA] 
+[QA] .venv/lib64/python3.13/site-packages/timeout_sampler/__init__.py:179: TimeoutExpiredError
+[QA] =============================== warnings summary ===============================
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA]   /home/odh/opendatahub-tests/.venv/lib64/python3.13/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'api.ragmawsgpu-pool-s29p9.aws.rh-ods.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+[QA]     warnings.warn(
+[QA] 
+[QA] tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw]
+[QA]   /home/odh/opendatahub-tests/utilities/infra.py:1185: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+[QA]     tar_file.extractall(path=tmpdir)
+[QA] 
+[QA] -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+[QA] =========================== short test summary info ============================
+[QA] ERROR tests/model_serving/model_runtime/model_validation/test_modelvalidation.py::TestVLLMModelCarRaw::test_oci_model_car_raw_openai_inference[granite-3.1-8b-instruct-raw] - timeout_sampler.TimeoutExpiredError: Timed Out: 120
+[QA] Function: utilities.infra.wait_for_dsc_status_ready  Kwargs: {'dsc_resource': <ocp_resources.data_science_cluster.DataScienceCluster object at 0x7f00bedefb10>}
+[QA] Last exception: ResourceNotReadyError: DSC default-dsc is not ready.
+[QA] Current status: {'components': {'aipipelines': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'Kubeflow Pipelines',
+[QA]  'repoUrl': 'https://github.com/kubeflow/pipelines',
+[QA]  'version': '2.5.0'}]},
+[QA]  'dashboard': {'managementState': 'Managed'},
+[QA]  'feastoperator': {'managementState': 'Removed'},
+[QA]  'kserve': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'KServe',
+[QA]  'repoUrl': 'https://github.com/kserve/kserve/',
+[QA]  'version': 'v0.14.0'}]},
+[QA]  'kueue': {'managementState': 'Removed'},
+[QA]  'llamastackoperator': {'managementState': 'Removed'},
+[QA]  'modelregistry': {'managementState': 'Managed',
+[QA]  'registriesNamespace': 'rhoai-model-registries',
+[QA]  'releases': [{'name': 'Google ML Metadata',
+[QA]  'repoUrl': 'https://github.com/google/ml-metadata',
+[QA]  'version': 'v1.14.0'},
+[QA]               {'name': 'Kubeflow Model Registry',
+[QA]  'repoUrl': 'https://github.com/kubeflow/model-registry',
+[QA]  'version': 'latest'},
+[QA]               {'name': 'Open Data Hub Model Registry Operator',
+[QA]  'repoUrl': 'https://github.com/opendatahub-io/model-registry-operator',
+[QA]  'version': 'latest'}]},
+[QA]  'ray': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'KubeRay',
+[QA]  'repoUrl': 'https://github.com/ray-project/kuberay',
+[QA]  'version': '1.4.2'}]},
+[QA]  'trainingoperator': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'Kubeflow Training Operator',
+[QA]  'repoUrl': 'https://github.com/kubeflow/trainer',
+[QA]  'version': '1.9.0'}]},
+[QA]  'trustyai': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'TrustyAI operator',
+[QA]  'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA]  'version': 'v1.37.0'},
+[QA]               {'name': 'TrustyAI service',
+[QA]  'repoUrl': 'https://github.com/trustyai-explainability/trustyai-explainability',
+[QA]  'version': 'v0.28.0'},
+[QA]               {'name': 'TrustyAI LMEval driver',
+[QA]  'repoUrl': 'https://github.com/trustyai-explainability/trustyai-service-operator',
+[QA]  'version': 'v1.37.0'},
+[QA]               {'name': 'TrustyAI LMEval job',
+[QA]  'repoUrl': 'https://github.com/EleutherAI/lm-evaluation-harness',
+[QA]  'version': 'v0.4.8'},
+[QA]               {'name': 'TrustyAI Guardrails orchestrator',
+[QA]  'repoUrl': 'https://github.com/foundation-model-stack/fms-guardrails-orchestrator',
+[QA]  'version': '0.9.4'},
+[QA]               {'name': 'TrustyAI builtin detectors',
+[QA]  'repoUrl': 'https://github.com/trustyai-explainability/guardrails-regex-detector',
+[QA]  'version': 'v0.2.0'},
+[QA]               {'name': 'TrustyAI sidecar gateway',
+[QA]  'repoUrl': 'https://github.com/trustyai-explainability/vllm-orchestrator-gateway',
+[QA]  'version': 'v0.2.1'}]},
+[QA]  'workbenches': {'managementState': 'Managed',
+[QA]  'releases': [{'name': 'Kubeflow Notebook Controller',
+[QA]  'repoUrl': 'https://github.com/kubeflow/kubeflow',
+[QA]  'version': '1.10.0'}],
+[QA]  'workbenchNamespace': 'rhods-notebooks'}},
+[QA]  'conditions': [{'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': 'Some components are not ready: trustyai',
+[QA]  'reason': 'NotReady',
+[QA]  'status': 'False',
+[QA]  'type': 'Ready'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'observedGeneration': 43,
+[QA]  'status': 'True',
+[QA]  'type': 'ProvisioningSucceeded'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': 'Some components are not ready: trustyai',
+[QA]  'reason': 'NotReady',
+[QA]  'status': 'False',
+[QA]  'type': 'ComponentsReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'AIPipelinesReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'DashboardReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': 'Component ManagementState is set to Removed',
+[QA]  'reason': 'Removed',
+[QA]  'severity': 'Info',
+[QA]  'status': 'False',
+[QA]  'type': 'FeastOperatorReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'KserveReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': 'Component ManagementState is set to Removed',
+[QA]  'reason': 'Removed',
+[QA]  'severity': 'Info',
+[QA]  'status': 'False',
+[QA]  'type': 'KueueReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': 'Component ManagementState is set to Removed',
+[QA]  'reason': 'Removed',
+[QA]  'severity': 'Info',
+[QA]  'status': 'False',
+[QA]  'type': 'LlamaStackOperatorReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'ModelControllerReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'ModelRegistryReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'RayReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'TrainingOperatorReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'message': '0/1 deployments ready',
+[QA]  'reason': 'DeploymentsNotReady',
+[QA]  'status': 'False',
+[QA]  'type': 'TrustyAIReady'},
+[QA]                 {'lastTransitionTime': '2025-11-23T02:37:24Z',
+[QA]  'status': 'True',
+[QA]  'type': 'WorkbenchesReady'}],
+[QA]  'observedGeneration': 30,
+[QA]  'phase': 'Not Ready',
+[QA]  'release': {'name': 'OpenShift AI Self-Managed', 'version': '3.0.0'}}.
+[QA] =================== 7 warnings, 1 error in 136.59s (0:02:16) ===================
+ERROR:runtimes_dep_agent.agent.specialists.qa_specialist:ODH tests exited with code 1
+### Configuration Summary
+Based on the Configuration Specialist's report, the preloaded model has the following requirements:
+*   **Model Name**: `granite-3.1-8b-instruct`
+*   **Parameters**: 8 billion
+*   **Quantization**: None
+*   **Disk Footprint**: 15.24 GB
+*   **Estimated VRAM**: 18 GB
+
+### Accelerator Summary
+The Accelerator Specialist provided the following hardware details:
+*   **GPU Available**: Yes
+*   **Provider**: NVIDIA
+*   **Compatibility**: The available hardware supports CUDA-compatible models and vLLM-Spyre-x86.
+
+### Deployment Decision
+The Decision Specialist issued a **GO** for deployment. The decision was based on the following comparison:
+*   **Model VRAM Required**: 18 GB
+*   **Per-GPU Memory Available**: 44.99 GB
+The specialist concluded that the model's memory requirement is well within the capacity of the available GPU.
+
+### QA Validation
+The QA Specialist reported that the validation test suite **failed**.
+*   **Root Cause**: The OpenShift AI `DataScienceCluster` (DSC) resource did not become "Ready" within the timeout period.
+*   **Failing Component**: The logs indicate that the `trustyai` component's deployments are not available, preventing the DSC from reaching a healthy state.
+*   **Recommendation**: An administrator should investigate the state of the `DataScienceCluster` and its component pods to resolve the issue.

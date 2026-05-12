@@ -3,7 +3,41 @@
     "model_name": "granite",
     "image": "oci://registry.redhat.io/rhelai1/modelcar-granite-3-1-8b-base-quantized-w4a16:1.5",
     "arguments": [],
-    "model_size_gb": 4.59,
+    "model_size_gb": 76.46,
+    "model_p_billion": 80.0,
+    "quantization_bits": 8,
+    "required_vram_gb": 88,
+    "supported_arch": "amd64"
+  },
+  "modelcar-qwen3-next-80b-a3b-instruct-quantized-w4a16": {
+    "model_name": "modelcar-qwen3-next-80b-a3b-instruct-quantized-w4a16",
+    "image": "oci://registry.stage.redhat.io/rhai/modelcar-qwen3-next-80b-a3b-instruct-quantized-w4a16:3.0",
+    "arguments": [],
+    "model_size_gb": 40.94,
+    "model_p_billion": 80.0,
+    "quantization_bits": 4,
+    "required_vram_gb": 44,
+    "supported_arch": "amd64"
+  },
+  "modelcar-granite-4-0-h-small-fp8-dynamic": {
+    "model_name": "modelcar-granite-4-0-h-small-fp8-dynamic",
+    "image": "oci://registry.stage.redhat.io/rhai/modelcar-granite-4-0-h-small-fp8-dynamic:3.0",
+    "arguments": [],
+    "model_size_gb": 30.44,
+    "model_p_billion": null,
+    "quantization_bits": 8,
+    "required_vram_gb": null,
+    "supported_arch": "amd64"
+  },
+  "modelcar-ministral-3-14b-instruct-2512": {
+    "model_name": "modelcar-ministral-3-14b-instruct-2512",
+    "image": "oci://registry.stage.redhat.io/rhai/modelcar-ministral-3-14b-instruct-2512:3.0"
+  },
+  "modelcar-granite-4-0-h-small": {
+    "model_name": "modelcar-granite-4-0-h-small",
+    "image": "oci://registry.stage.redhat.io/rhai/modelcar-granite-4-0-h-small:3.0",
+    "arguments": [],
+    "model_size_gb": 60.01,
     "model_p_billion": null,
     "quantization_bits": null,
     "required_vram_gb": null,

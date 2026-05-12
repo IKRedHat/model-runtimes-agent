@@ -27,14 +27,23 @@ class ToolStatus:
     installed: bool
     version: str = ""
     path: str = ""
+    # Podman only: True if the engine responds (e.g. `podman info` succeeds).
+    # None means not applicable (oc, skopeo) or tool not installed.
+    running: bool | None = None
+    running_detail: str = ""
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "name": self.name,
             "installed": self.installed,
             "version": self.version,
             "path": self.path,
         }
+        if self.running is not None:
+            d["running"] = self.running
+        if self.running_detail:
+            d["running_detail"] = self.running_detail
+        return d
 
 
 def _get_tool_version(name: str) -> str:
@@ -63,6 +72,28 @@ def _get_tool_version(name: str) -> str:
     return ""
 
 
+def _podman_engine_running(podman_bin: str = "podman") -> tuple[bool, str]:
+    """Return (ok, detail) after probing whether the Podman engine is reachable."""
+    try:
+        result = subprocess.run(
+            [podman_bin, "info"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if result.returncode == 0:
+            return True, ""
+        err = (result.stderr or result.stdout or "").strip()
+        first = err.splitlines()[0] if err else "podman info failed"
+        return False, first[:200]
+    except FileNotFoundError:
+        return False, "podman not found"
+    except subprocess.TimeoutExpired:
+        return False, "podman info timed out (engine may be hung or not started)"
+    except OSError as exc:
+        return False, str(exc)
+
+
 def check_tool(name: str) -> ToolStatus:
     path = shutil.which(name)
     if not path:
@@ -70,7 +101,18 @@ def check_tool(name: str) -> ToolStatus:
     version = _get_tool_version(name)
     if not version:
         return ToolStatus(name=name, installed=False, path=path)
-    return ToolStatus(name=name, installed=True, version=version, path=path)
+    if name != "podman":
+        return ToolStatus(name=name, installed=True, version=version, path=path)
+
+    ok, detail = _podman_engine_running(path)
+    return ToolStatus(
+        name=name,
+        installed=True,
+        version=version,
+        path=path,
+        running=ok,
+        running_detail=detail if not ok else "",
+    )
 
 
 def run_preflight_checks(
@@ -95,7 +137,12 @@ def run_preflight_checks(
 
 
 def preflight_ok(results: list[ToolStatus]) -> bool:
-    return all(r.installed for r in results)
+    for r in results:
+        if not r.installed:
+            return False
+        if r.name == "podman" and r.running is False:
+            return False
+    return True
 
 
 def _print_tool_status(status: ToolStatus) -> None:
@@ -104,7 +151,14 @@ def _print_tool_status(status: ToolStatus) -> None:
         detail = f"({status.version})" if status.version else ""
         if status.path:
             detail = f"({status.path})" if not detail else f"({status.version}, {status.path})"
-        print(f"{label}{GREEN}{CHECK} installed{RESET}  {detail}")
+        if status.name == "podman" and status.running is False:
+            extra = status.running_detail or "engine not reachable"
+            print(f"{label}{YELLOW}{CHECK} installed{RESET}  {detail}")
+            print(f"{' ' * len(label)}{RED}{CROSS} engine not running{RESET}  {DIM}{extra}{RESET}")
+        else:
+            print(f"{label}{GREEN}{CHECK} installed{RESET}  {detail}")
+            if status.name == "podman" and status.running is True:
+                print(f"{' ' * len(label)}{GREEN}{CHECK} engine reachable{RESET}")
     else:
         print(f"{label}{RED}{CROSS} NOT FOUND{RESET}")
 

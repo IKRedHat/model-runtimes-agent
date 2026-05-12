@@ -103,6 +103,18 @@ def _load_text(path: Path) -> str:
         return ""
 
 
+def _machine_verdict_line_html(verdict: str) -> str:
+    """Single parseable line for HTML reports (matches text markers used by _extract_verdict)."""
+    v = (verdict or "UNKNOWN").strip().upper()
+    if v == "NO-GO":
+        label = "NO-GO"
+    elif v == "GO":
+        label = "GO"
+    else:
+        label = "UNKNOWN"
+    return f'<p class="machine-verdict"><strong>Verdict: {_esc(label)}</strong></p>'
+
+
 def _extract_verdict(deployment_text: str) -> str:
     """Extract verdict from explicit 'Verdict:' or 'Deployment Decision:' markers only."""
     if not deployment_text or not deployment_text.strip():
@@ -321,8 +333,28 @@ def _section_preflight(results: list[dict] | None) -> str:
         return ""
     rows = ""
     for r in results:
-        icon = '<span class="status-pass">&#10003; Installed</span>' if r.get("installed") else '<span class="status-fail">&#10007; Not Found</span>'
-        rows += f"<tr><td><code>{_esc(r.get('name', ''))}</code></td><td>{icon}</td><td>{_esc(r.get('version', ''))}</td><td><code>{_esc(r.get('path', ''))}</code></td></tr>\n"
+        name = r.get("name", "")
+        podman_engine_down = (
+            name == "podman"
+            and r.get("installed")
+            and r.get("running") is False
+        )
+        if r.get("installed") and not podman_engine_down:
+            engine = ""
+            if name == "podman" and r.get("running") is True:
+                engine = " <span class=\"status-pass\">Engine OK</span>"
+            icon = f'<span class="status-pass">&#10003; Installed</span>{engine}'
+        elif podman_engine_down:
+            detail = _esc(r.get("running_detail") or "")
+            icon = (
+                '<span class="status-pass">&#10003; Installed</span> '
+                '<span class="status-fail">&#10007; Engine not reachable</span>'
+            )
+            if detail:
+                icon += f' <span class="muted">({detail})</span>'
+        else:
+            icon = '<span class="status-fail">&#10007; Not Found</span>'
+        rows += f"<tr><td><code>{_esc(name)}</code></td><td>{icon}</td><td>{_esc(r.get('version', ''))}</td><td><code>{_esc(r.get('path', ''))}</code></td></tr>\n"
     return f"""
     <section id="preflight">
       <h2>Pre-flight Checks</h2>
@@ -412,9 +444,10 @@ def _section_deployment(
 
     matrix_html = ""
     safe_matrix = [e for e in (matrix if isinstance(matrix, list) else []) if isinstance(e, dict)]
+    models_map = models if isinstance(models, dict) else {}
     if safe_matrix:
-        deployable = [e for e in safe_matrix if e.get("deployable", False)]
-        blocked = [e for e in safe_matrix if not e.get("deployable", False)]
+        deployable = [e for e in safe_matrix if _matrix_entry_fully_deployable(e, models_map)]
+        blocked = [e for e in safe_matrix if not _matrix_entry_fully_deployable(e, models_map)]
         matrix_html += '<div class="matrix-grid">'
         matrix_html += '<div class="matrix-col"><h4>Deployable</h4>'
         if deployable:
@@ -432,10 +465,14 @@ def _section_deployment(
         matrix_html += "</div></div>"
 
     detail_html = ""
+    machine = _machine_verdict_line_html(verdict)
     if deployment_text:
         rendered = _md_to_html(deployment_text)
         detail_html = f"""
-        <div class="rendered-md" style="margin-top:16px">{rendered}</div>"""
+        <div class="rendered-md" style="margin-top:16px">{machine}{rendered}</div>"""
+    else:
+        detail_html = f"""
+        <div class="rendered-md" style="margin-top:16px">{machine}</div>"""
 
     return f"""
     <section id="deployment">
@@ -658,6 +695,16 @@ code, code.inline { background: #eef1f5; padding: 2px 6px; border-radius: 4px; f
 .rendered-md h4.md-h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--accent); }
 .rendered-md h5.md-h4 { font-size: 0.88rem; margin: 12px 0 4px; color: var(--text); font-weight: 600; }
 .rendered-md p { margin: 6px 0; }
+.rendered-md p.machine-verdict {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  margin: 0 0 14px 0;
+  padding: 10px 14px;
+  background: #eef2f6;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+}
 .rendered-md ul.md-list { margin: 6px 0 6px 20px; }
 .rendered-md ul.md-list li { margin-bottom: 4px; }
 .rendered-md .code-block {

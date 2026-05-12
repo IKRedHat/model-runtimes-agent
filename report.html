@@ -163,6 +163,16 @@ code, code.inline { background: #eef1f5; padding: 2px 6px; border-radius: 4px; f
 .rendered-md h4.md-h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--accent); }
 .rendered-md h5.md-h4 { font-size: 0.88rem; margin: 12px 0 4px; color: var(--text); font-weight: 600; }
 .rendered-md p { margin: 6px 0; }
+.rendered-md p.machine-verdict {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  margin: 0 0 14px 0;
+  padding: 10px 14px;
+  background: #eef2f6;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+}
 .rendered-md ul.md-list { margin: 6px 0 6px 20px; }
 .rendered-md ul.md-list li { margin-bottom: 4px; }
 .rendered-md .code-block {
@@ -233,7 +243,7 @@ details summary {
 
     <section id="configuration">
       <h2>Configuration Summary</h2>
-      <p style="margin-bottom:16px"><strong>1</strong> model(s) found in configuration.</p>
+      <p style="margin-bottom:16px"><strong>2</strong> model(s) found in configuration.</p>
       <div class="table-wrap">
       <table>
         <thead><tr><th>Model</th><th>Image</th><th>Size</th><th>Parameters</th><th>Quantization</th><th>Est. VRAM</th><th>Arch</th></tr></thead>
@@ -258,6 +268,19 @@ details summary {
             <li><strong>Allocatable GPUs:</strong> 8</li>
             <li><strong>Node RAM:</strong> 2099.5 GB</li>
             <li><strong>Node Storage:</strong> 114.3 GB</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Node 3: ip-10-0-49-166.ec2.internal</h3>
+          <ul>
+            <li><strong>Cloud Provider:</strong> AWS</li>
+            <li><strong>Instance Type:</strong> p4d.24xlarge</li>
+            <li><strong>GPU Provider:</strong> NVIDIA</li>
+            <li><strong>GPU Product:</strong> NVIDIA-A100-SXM4-40GB</li>
+            <li><strong>Per-GPU Memory:</strong> 40.0 GB GB</li>
+            <li><strong>Allocatable GPUs:</strong> 8</li>
+            <li><strong>Node RAM:</strong> 1203.6 GB</li>
+            <li><strong>Node Storage:</strong> 867.7 GB</li>
           </ul>
         </div></div>
     </section>
@@ -332,7 +355,7 @@ details summary {
 
 
 <h4 class="md-h3">Accelerator Summary</h4>
-<p>The Accelerator Specialist reported the following about the cluster environment:</p>
+<p>The Accelerator Specialist reported the following about the cluster&#x27;s accelerators:</p>
 <ul class="md-list">
   <li><strong>GPU Available</strong>: Yes</li>
   <li><strong>GPU Provider</strong>: NVIDIA</li>
