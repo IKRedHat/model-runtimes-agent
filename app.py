@@ -17,6 +17,8 @@ import pandas as pd
 import json
 from pathlib import Path
 import selectors
+import shutil
+import uuid
 
 from runtimes_dep_agent.utils.path_utils import detect_repo_root
 from runtimes_dep_agent.preflight import run_preflight_checks, preflight_ok
@@ -368,21 +370,48 @@ if "oc_login_command" not in st.session_state:
     st.session_state.oc_login_command = None
 if "preflight_results" not in st.session_state:
     st.session_state.preflight_results = None
-if "run_info_dir" not in st.session_state:
-    st.session_state.run_info_dir = None
 if "agent_pid" not in st.session_state:
     st.session_state.agent_pid = None
 if "registry_host" not in st.session_state:
     st.session_state.registry_host = os.environ.get("REGISTRY_HOST") or None
 if "agent_interrupted" not in st.session_state:
     st.session_state.agent_interrupted = False
+if "qa_skip_namespace_delete" not in st.session_state:
+    st.session_state.qa_skip_namespace_delete = False
+if "agent_run_info_dir" not in st.session_state:
+    st.session_state.agent_run_info_dir = None
 
-# Helper: per-run info dir when agent was started from UI, else repo info/
-def _get_info_dir() -> Path:
-    run_dir = st.session_state.get("run_info_dir")
-    if run_dir:
-        return Path(run_dir)
-    return Path(detect_repo_root([Path(__file__).resolve()]), "info")
+
+def _maybe_debug_info_symlink(root: Path, target: Path) -> None:
+    """Optional: repo_root/info_debug_latest -> this run dir when AGENT_RUN_INFO_SYMLINK is truthy (local IDE/debug)."""
+    raw = os.environ.get("AGENT_RUN_INFO_SYMLINK", "").strip().lower()
+    if raw not in ("1", "true", "yes", "y"):
+        return
+    link = root / "info_debug_latest"
+    try:
+        if link.is_symlink() or link.is_file():
+            link.unlink(missing_ok=True)
+        elif link.is_dir():
+            return
+        link.symlink_to(target.resolve(), target_is_directory=True)
+    except OSError:
+        pass
+
+
+def _ensure_run_info_dir() -> Path:
+    """Create a new per-run info directory under <repo>/.streamlit_agent_runs/; remove the previous run dir in this session."""
+    root = detect_repo_root([Path(__file__).resolve()])
+    base = root / ".streamlit_agent_runs"
+    base.mkdir(parents=True, exist_ok=True)
+    old = st.session_state.get("agent_run_info_dir")
+    if isinstance(old, Path) and old.is_dir():
+        shutil.rmtree(old, ignore_errors=True)
+    run_id = uuid.uuid4().hex
+    d = base / run_id
+    d.mkdir(parents=False, exist_ok=False)
+    st.session_state["agent_run_info_dir"] = d
+    _maybe_debug_info_symlink(root, d)
+    return d
 
 
 def _agent_subprocess_is_running() -> bool:
@@ -750,11 +779,8 @@ def extract_qa_summary(agent_output: str) -> tuple[str, str]:
         if (re.match(r'^\[.*\]', line) or 
             re.match(r'^\d{4}-\d{2}-\d{2}', line) or
             re.match(r'^\[QA\]', line) or
-            line.startswith('podman') or
-            line.startswith('Running ODH') or
-            'INFO' in line or 'ERROR' in line or 'WARNING' in line or
-            'test_modelvalidation.py' in line or
-            'opendatahub-tests' in line):
+            line.startswith('Starting KServe deployment QA') or
+            'INFO' in line or 'ERROR' in line or 'WARNING' in line):
             continue
         # Skip empty lines at start
         if not cleaned_lines and not line:
@@ -808,56 +834,66 @@ def extract_qa_summary(agent_output: str) -> tuple[str, str]:
     return status, qa_summary
 
 
-def _normalize_for_verdict_scan(text: str) -> str:
-    """Strip common markdown so **Verdict:** GO / NO-GO still match."""
-    return re.sub(r"[*_`]", "", text or "")
-
-
-def _deployment_output_has_nogo(agent_output: str) -> bool:
-    """True if supervisor output contains an explicit NO-GO deployment verdict (case-insensitive)."""
-    s = _normalize_for_verdict_scan(agent_output).lower()
-    patterns = (
-        r"deployment\s+decision\s*:\s*no-?\s*go\b",
-        r"verdict\s*:\s*no-?\s*go\b",
-    )
-    return any(re.search(p, s) for p in patterns)
-
-
-def _deployment_output_has_explicit_go(agent_output: str) -> bool:
-    """True if supervisor output contains an explicit GO deployment verdict (case-insensitive)."""
-    s = _normalize_for_verdict_scan(agent_output).lower()
-    patterns = (
-        r"deployment\s+decision\s*:\s*go\b",
-        r"verdict\s*:\s*go\b",
-    )
-    return any(re.search(p, s) for p in patterns)
-
-
-def deployment_success_badge_ok(agent_output: str, qa_status: str) -> bool:
+def extract_qa_model_progress(agent_output: str) -> list[dict]:
     """
-    Whether to show a successful deployment banner. Requires explicit GO verdict
-    lines in the agent output, no explicit NO-GO, passing QA per qa_status, and
-    no Podman/runtime tool errors.
+    Parse QA_MODEL_* progress protocol emitted by the QA pipeline.
+    Returns a list of model dicts: {model_name, isvc_name, status, detail, url}.
     """
-    out = agent_output or ""
-    out_u = out.upper()
-    # Tool-level failures (Podman missing, engine unreachable, etc.)
-    if "QA_ERROR:RUNTIME_NOT_FOUND" in out_u or "QA_ERROR:RUNTIME" in out_u:
-        return False
-    if "RUNTIME_NOT_FOUND" in out_u and "PODMAN" in out_u:
-        return False
-    if qa_status in ("failed", "skipped", "pending"):
-        return False
-    if _deployment_output_has_nogo(out):
-        return False
-    if not _deployment_output_has_explicit_go(out):
-        return False
-    if qa_status == "passed":
-        return True
-    if qa_status == "completed" and "QA_OK" in out:
-        return True
-    return False
+    if not agent_output:
+        return []
 
+    models: dict[str, dict] = {}
+
+    def ensure(name: str) -> dict:
+        if name not in models:
+            models[name] = {
+                "model_name": name,
+                "isvc_name": "",
+                "status": "pending",
+                "detail": "",
+                "url": "",
+            }
+        return models[name]
+
+    for raw in agent_output.splitlines():
+        line = raw.strip()
+        if not line.startswith("[QA]"):
+            continue
+        payload = line[len("[QA]") :].strip()
+        if not payload.startswith("QA_MODEL_"):
+            continue
+        parts = payload.split("::")
+        if len(parts) < 2:
+            continue
+        event = parts[0]
+        model = parts[1] if len(parts) > 1 else ""
+        isvc = parts[2] if len(parts) > 2 else ""
+
+        if not model:
+            continue
+        rec = ensure(model)
+        if isvc and isvc != "None":
+            rec["isvc_name"] = isvc
+
+        if event == "QA_MODEL_START":
+            rec["status"] = "deploying"
+        elif event == "QA_MODEL_APPLIED":
+            rec["status"] = "applied"
+        elif event == "QA_MODEL_HEAL":
+            rec["status"] = "healing"
+            rec["detail"] = "::".join(parts[2:]) if len(parts) > 2 else ""
+        elif event == "QA_MODEL_READY":
+            rec["status"] = "ready"
+            # url is optional 4th field
+            if len(parts) > 3:
+                rec["url"] = parts[3].strip()
+        elif event == "QA_MODEL_FAIL":
+            rec["status"] = "failed"
+            rec["detail"] = "::".join(parts[2:]) if len(parts) > 2 else ""
+
+    # Stable ordering for UI display
+    order = ["deploying", "applied", "healing", "ready", "failed", "pending"]
+    return sorted(models.values(), key=lambda x: (order.index(x["status"]) if x["status"] in order else 99, x["model_name"]))
 
 # Function to parse GPU info from gpu_info.txt
 def parse_gpu_info():
@@ -1069,6 +1105,16 @@ with st.sidebar:
     else:
         st.session_state.oc_login_command = None
 
+    st.subheader("QA cleanup")
+    st.session_state.qa_skip_namespace_delete = st.checkbox(
+        "Keep model-validation namespace after successful QA",
+        value=st.session_state.qa_skip_namespace_delete,
+        help=(
+            "When checked, sets QA_SKIP_NAMESPACE_DELETE=1 for the agent process: the "
+            "`model-validation` namespace is not deleted after all models pass (useful for debugging)."
+        ),
+    )
+
     # YAML file upload (mandatory)
     st.subheader("Upload Modelcar Images YAML File *")
     uploaded_file = st.file_uploader(
@@ -1097,21 +1143,12 @@ with st.sidebar:
     
     # Reset button
     if st.button("Reset", width='stretch'):
-        # Clear info folder files (run-scoped or repo info/)
-        info_dir = _get_info_dir()
-        files_to_clear = ["models_info.json", "gpu_info.txt", "deployment_info.txt", "deployment_matrix.json"]
-        for filename in files_to_clear:
-            file_path = info_dir / filename
-            if file_path.exists():
-                try:
-                    # Clear file content by writing empty string
-                    with open(file_path, 'w') as f:
-                        f.write("")
-                except Exception as e:
-                    st.error(f"Error clearing {filename}: {str(e)}")
-        
+        old_dir = st.session_state.pop("agent_run_info_dir", None)
+        if isinstance(old_dir, Path) and old_dir.is_dir():
+            shutil.rmtree(old_dir, ignore_errors=True)
+        st.session_state.agent_run_info_dir = None
+
         # Reset session state
-        st.session_state.run_info_dir = None
         st.session_state.agent_started = False
         st.session_state.workflow_completed = False
         st.session_state.workflow_step = 0
@@ -1133,6 +1170,7 @@ with st.sidebar:
         }
         st.session_state.agent_interrupted = False
         st.session_state.agent_pid = None
+        st.session_state.qa_skip_namespace_delete = False
         st.rerun()
 
 # Main interface — report-style header banner
@@ -1262,7 +1300,9 @@ if not st.session_state.agent_started:
                         os.environ["GEMINI_API_KEY"] = st.session_state.gemini_api_key
                     if st.session_state.oci_pull_secret:
                         os.environ["OCI_REGISTRY_PULL_SECRET"] = st.session_state.oci_pull_secret
-                    
+
+                    _ensure_run_info_dir()
+
                     temp_dir = tempfile.gettempdir()
                     config_path = os.path.join(temp_dir, "modelcar_config.yaml")
                     with open(config_path, 'wb') as tmp_file:
@@ -1566,6 +1606,7 @@ else:
         # Extract QA summary from full agent output
         agent_output = st.session_state.agent_output_text or ""
         qa_status, qa_message = extract_qa_summary(agent_output)
+        qa_models = extract_qa_model_progress(agent_output)
         
         # If no QA info found and agent output exists, show a message
         if qa_status == "pending" and agent_output:
@@ -1586,6 +1627,45 @@ else:
         <p style="font-size: 0.88rem; line-height: 1.7; color: #2d3436;">{qa_message}</p>
         </div>
         """, unsafe_allow_html=True)
+
+        if qa_models:
+            st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+            st.markdown("**Per-model deployment progress**")
+            for m in qa_models:
+                status = m.get("status", "pending")
+                name = m.get("model_name", "")
+                isvc = m.get("isvc_name", "")
+                detail = m.get("detail", "")
+                url = m.get("url", "")
+
+                color = "#636e72"
+                bg = "#f1f2f6"
+                mark = "…"
+                if status == "ready":
+                    color, bg, mark = "#00b894", "#e6fcf5", "✓"
+                elif status in ("deploying", "applied", "healing"):
+                    color, bg, mark = "#0984e3", "#e8f4ff", "⟳"
+                elif status == "failed":
+                    color, bg, mark = "#d63031", "#ffeaea", "✗"
+
+                extra = []
+                if isvc:
+                    extra.append(f"ISVC: {isvc}")
+                if url:
+                    extra.append(f"URL: {url}")
+                if detail:
+                    extra.append(detail)
+                extra_html = "<br>".join(f"<small style='color:#636e72;'>{e}</small>" for e in extra)
+
+                st.markdown(
+                    f"""
+<div style="background:{bg}; border-left:4px solid {color}; padding:10px 14px; border-radius:8px; margin-bottom:8px; font-size:0.88rem;">
+  {mark} <strong>{name}</strong> <span style="color:{color}; font-weight:700;">({status})</span>
+  {('<br>' + extra_html) if extra_html else ''}
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
         st.markdown("---")
     
     # if st.session_state.workflow_step >= 5:
@@ -1853,21 +1933,16 @@ else:
             # Set agent start time for timeline tracking
             if st.session_state.agent_start_time is None:
                 st.session_state.agent_start_time = time.time()
-            
+            if st.session_state.get("agent_run_info_dir") is None:
+                _ensure_run_info_dir()
+
             placeholder = st.empty()
             with placeholder:
                 with st.spinner("Running supervisor agent..."):
                     try:
                         # Run the CLI command: agent --config <config_path>
                         config_path = st.session_state.config_path
-                        
-                        # Per-run artifact dir so report and UI loaders use same path as agent
-                        if not st.session_state.get("run_info_dir"):
-                            run_dir = Path(tempfile.mkdtemp(prefix="agent_run_"))
-                            info_dir = run_dir / "info"
-                            info_dir.mkdir(parents=True, exist_ok=True)
-                            st.session_state.run_info_dir = str(info_dir)
-                        
+
                         # Find the agent command - try venv first, then system PATH
                         project_dir = os.path.dirname(os.path.abspath(__file__))
                         venv_agent = os.path.join(project_dir, ".venv", "bin", "agent")
@@ -1899,9 +1974,13 @@ else:
                             env["VLLM_RUNTIME_IMAGE"] = st.session_state.vllm_runtime_image
                         if st.session_state.registry_host:
                             env["REGISTRY_HOST"] = st.session_state.registry_host
-                        if st.session_state.get("run_info_dir"):
-                            env["AGENT_RUN_INFO_DIR"] = st.session_state.run_info_dir
-                        
+                        # Persist artifacts under <repo>/info so the UI, subprocess, and editor see the same files.
+                        env["AGENT_RUN_INFO_DIR"] = str(_get_info_dir())
+                        if st.session_state.get("qa_skip_namespace_delete"):
+                            env["QA_SKIP_NAMESPACE_DELETE"] = "1"
+                        else:
+                            env.pop("QA_SKIP_NAMESPACE_DELETE", None)
+
                         if live_output_placeholder is None:
                             live_output_placeholder = st.empty()
 

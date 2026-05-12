@@ -1,39 +1,34 @@
 ### Configuration Summary
-The Configuration Specialist reported the following details for the model-car configuration:
-- **Model:** ministral-3-14b-instruct-2512
-- **Image Size:** 29.34 GB
-- **Parameter Count:** 14 Billion
-- **Estimated VRAM:** 31 GB
-- **Supported Architectures:** amd64
+The Configuration Specialist reported the following details for the `sarvam` model:
+- **Image Size**: 36.07 GB
+- **Supported Architectures**: amd64
+
+Optimized serving arguments were later applied to the model-car configuration as recommended by the Decision Specialist. The applied arguments are:
+```json
+{
+  "args": [
+    "--uvicorn-log-level=info",
+    "--max-model-len=2048",
+    "--trust-remote-code",
+    "--tensor-parallel-size=1"
+  ],
+  "gpu_count": 1
+}
+```
+
 
 ### Accelerator Summary
-The Accelerator Specialist inspected the cluster and provided the following summary:
-- **Status:** GPU available
-- **Provider:** NVIDIA
-- **Compatibility:** The cluster supports CUDA-compatible models and the vLLM runtime.
-- **vLLM Runtime Image:** `registry.redhat.io/rhaiis/vllm-cuda-rhel9@sha256:094db84a1da5e8a575d0c9eade114fa30f4a2061064a338e3e032f3578f8082a`
+The Accelerator Specialist reported the following about the cluster environment:
+- **GPU Available**: Yes
+- **GPU Provider**: NVIDIA
+- **vLLM Runtime Image**: `registry.redhat.io/rhaii/vllm-cuda-rhel9@sha256:d3e57d4ca13a17f4d5d1228df4fe47cfe1a9f630250a8b3d26f86d871fdb9e69`
 
 ### Deployment Decision
-The Decision Specialist issued a **GO** verdict for deployment.
-- **GPU Capacity:** The model's estimated VRAM requirement of 31 GB fits within the available 40 GB per GPU on the cluster.
-- **Serving Arguments:** The initial configuration was missing serving arguments. The specialist recommended and applied a safe default configuration for single-GPU deployment to ensure stability.
-- **Configuration Update:** The optimized serving arguments were successfully written back to the model-car configuration. The applied optimization was:
-  
-```json
-  "serving_arguments": {
-    "args": [
-      "--uvicorn-log-level=info",
-      "--trust-remote-code",
-      "--tensor-parallel-size=1",
-      "--max-model-len=2048"
-    ],
-    "gpu_count": 1
-  }
-  ```
+The final deployment verdict is **NO-GO**.
 
-- **Environment Health:** The cluster environment is healthy and accessible.
+The Decision Specialist provided the following reasoning:
+- **VRAM Feasibility**: The model's estimated VRAM of 36.07 GB fits on a single GPU.
+- **Quantization Incompatibility**: The model is quantized in FP8, which is not supported by the detected NVIDIA A100 (Ampere architecture) GPUs. FP8 requires a newer architecture like Hopper (e.g., H100) or Ada (e.g., L40S).
 
 ### QA Validation
-The QA Specialist reported that the validation tests **FAILED**.
-- **Reason for Failure:** The tests failed during the model-serving pod initialization. The `storage-initializer` container could not download the model artifacts because the `storageUri` was invalid. The system was incorrectly configured to use the model's container image path as a storage URI, which is not a supported protocol.
-- **Recommendation:** The `InferenceService` configuration must be corrected by the development team to point the `storageUri` to a valid model artifact location (e.g., S3, GCS, or an HTTP server) or be removed if the model is packaged within the container image itself.
+QA validation was not performed because the deployment decision was **NO-GO** due to hardware incompatibility.

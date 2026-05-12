@@ -1,7 +1,7 @@
 {
-  "modelcar-qwen3-next-80b-a3b-instruct-fp8": {
-    "model_name": "modelcar-qwen3-next-80b-a3b-instruct-fp8",
-    "image": "oci://registry.stage.redhat.io/rhai/modelcar-qwen3-next-80b-a3b-instruct-fp8:3.0",
+  "granite": {
+    "model_name": "granite",
+    "image": "oci://registry.redhat.io/rhelai1/modelcar-granite-3-1-8b-base-quantized-w4a16:1.5",
     "arguments": [],
     "model_size_gb": 76.46,
     "model_p_billion": 80.0,
@@ -41,16 +41,6 @@
     "model_p_billion": null,
     "quantization_bits": null,
     "required_vram_gb": null,
-    "supported_arch": "amd64"
-  },
-  "modelcar-qwen3-vl-235b-a22b-instruct-nvfp4": {
-    "model_name": "modelcar-qwen3-vl-235b-a22b-instruct-nvfp4",
-    "image": "oci://registry.stage.redhat.io/rhai/modelcar-qwen3-vl-235b-a22b-instruct-nvfp4:3.0",
-    "arguments": [],
-    "model_size_gb": 126.03,
-    "model_p_billion": 235.0,
-    "quantization_bits": 4,
-    "required_vram_gb": 130,
     "supported_arch": "amd64"
   }
 }

@@ -17,7 +17,8 @@ from ...validators.accelerator_validator import (
     check_cluster_login,
     check_gpu_availability,
     get_gpu_info,
-    get_vllm_runtime_image_from_template
+    get_vllm_runtime_image_from_template,
+    normalize_gpu_provider_for_vllm_template,
 )
 
 
@@ -80,7 +81,9 @@ def build_accelerator_specialist(
         """
         gpu_status, gpu_provider = check_gpu_availability()
         override_image = os.environ.get("VLLM_RUNTIME_IMAGE")
-        vllm_image = override_image or get_vllm_runtime_image_from_template(gpu_provider)
+        vllm_image = override_image or get_vllm_runtime_image_from_template(
+            normalize_gpu_provider_for_vllm_template(gpu_provider)
+        )
         
         metadata = {
             "gpu_available": gpu_status,

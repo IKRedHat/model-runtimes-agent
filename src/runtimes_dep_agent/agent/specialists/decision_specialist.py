@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
-import os
-import re
 from pathlib import Path
 from typing import Callable
 
@@ -16,6 +13,11 @@ from langchain_core.tools import tool
 
 from . import SpecialistSpec
 from ...utils.path_utils import detect_repo_root
+from ...validators.deployability_engine import (
+    compute_deployment_matrix,
+    min_tensor_parallel_for_weights,
+    parse_gpu_inventory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,33 +27,6 @@ REPO_ROOT = detect_repo_root([CURRENT_FILE])
 INFO_DIR = REPO_ROOT / "info"
 GPU_INFO_DEFAULT = INFO_DIR / "gpu_info.txt"
 DEPLOYMENT_INFO_DEFAULT = INFO_DIR / "deployment_info.txt"
-
-
-def _parse_gpu_summary(text: str) -> tuple[int, float | None]:
-    """Extract (total_gpus, per_gpu_mem_gb) from the GPU info text."""
-    total = 0
-    per_gpu = None
-    for line in text.splitlines():
-        normalized = line.lower()
-        if "allocatable gpus" in normalized:
-            match = re.search(r"(\d+)", line)
-            if match:
-                total += int(match.group(1))
-        if ("per-gpu memory" in normalized or "per gpu memory" in normalized) and per_gpu is None:
-            match = re.search(r"(\d+(?:\.\d+)?)", line)
-            if match:
-                try:
-                    per_gpu = float(match.group(1))
-                except ValueError:
-                    continue
-        if per_gpu is None and "gpu product" in normalized:
-            match = re.search(r"(\d+(?:\.\d+)?)\s*gb", line, re.IGNORECASE)
-            if match:
-                try:
-                    per_gpu = float(match.group(1))
-                except ValueError:
-                    continue
-    return total, per_gpu
 
 
 def build_decision_specialist(
@@ -83,34 +58,66 @@ def build_decision_specialist(
         except OSError as exc:
             return f"Deployment Fit Analysis:\n- Error reading GPU info file ({gpu_file}): {exc}"
 
-        total_gpus, per_gpu_mem = _parse_gpu_summary(gpu_text)
+        inv = parse_gpu_inventory(gpu_text)
+        total_gpus = inv.allocatable_gpus
+        per_gpu_mem = inv.per_gpu_mem_gb
 
         per_model_lines = []
         total_required = 0
         for name, info in precomputed_requirements.items():
             required_vram = info.get("required_vram_gb")
-            if required_vram and per_gpu_mem:
-                needed = max(1, math.ceil(required_vram / per_gpu_mem))
-                total_required += needed
+            model_size_gb = info.get("model_size_gb")
+            weight_proxy: float | None = None
+            proxy_note = ""
+
+            if required_vram is not None:
+                try:
+                    weight_proxy = float(required_vram)
+                except (TypeError, ValueError):
+                    weight_proxy = None
+            elif model_size_gb is not None:
+                try:
+                    weight_proxy = float(model_size_gb)
+                    proxy_note = (
+                        f" (catalog `required_vram_gb` missing; using `model_size_gb`={weight_proxy} GB "
+                        "as a weights-only proxy for tensor-parallel sizing — add KV-cache / runtime headroom in ops)"
+                    )
+                except (TypeError, ValueError):
+                    weight_proxy = None
+
+            if weight_proxy is not None and per_gpu_mem:
+                min_tp = min_tensor_parallel_for_weights(weight_proxy, per_gpu_mem)
+                total_required += min_tp
                 per_model_lines.append(
-                    f"- {name}: needs ~{needed} GPU(s) (requires {required_vram} GB; ~{per_gpu_mem} GB per GPU)"
+                    f"- {name}: minimum vLLM `--tensor-parallel-size` ≈ {min_tp} "
+                    f"(ceil({weight_proxy} / {per_gpu_mem}) for weight sharding across ~{per_gpu_mem} GB GPUs)"
+                    f"{proxy_note}. "
+                    f"Prefer this **minimal** TP — do **not** set tensor parallel to the full cluster size ({total_gpus}) "
+                    "unless latency/throughput goals require it; extra GPUs can stay unused or run separate replicas."
+                )
+            elif weight_proxy is not None:
+                per_model_lines.append(
+                    f"- {name}: weight proxy {weight_proxy} GB available{proxy_note}, "
+                    "but per-GPU memory is unknown — cannot compute minimum tensor parallel."
                 )
             elif required_vram:
                 per_model_lines.append(
                     f"- {name}: requires {required_vram} GB VRAM but per-GPU memory is unknown."
                 )
             else:
-                per_model_lines.append(f"- {name}: VRAM requirement could not be inferred.")
+                per_model_lines.append(f"- {name}: VRAM requirement could not be inferred (no model_size_gb either).")
 
         comparison = "Insufficient data to compare cluster capacity with model needs."
         if per_gpu_mem and total_required:
             if total_gpus >= total_required:
                 comparison = (
-                    f"Cluster GPUs available ({total_gpus}) meet or exceed the inferred need ({total_required})."
+                    f"Cluster GPUs available ({total_gpus}) meet or exceed the inferred minimum for "
+                    f"weight sharding ({total_required} GPU(s) at `--tensor-parallel-size`={total_required} for this catalog)."
                 )
             else:
                 comparison = (
-                    f"Cluster GPUs available ({total_gpus}) are below the inferred need ({total_required})."
+                    f"Cluster GPUs available ({total_gpus}) are below the inferred minimum tensor-parallel need "
+                    f"({total_required})."
                 )
 
         per_model_report = "\n".join(per_model_lines) if per_model_lines else "- No models found."
@@ -119,57 +126,64 @@ def build_decision_specialist(
             f"- Source GPU file: {gpu_file}\n"
             f"- Total GPUs available: {total_gpus}\n"
             f"- Per-GPU memory (parsed): {per_gpu_mem or 'unknown'} GB\n"
+            f"- GPU Product (from file): {inv.gpu_product_raw or 'unknown'}\n"
+            f"- Accelerator family (inferred from GPU Product / provider, not from VRAM size): {inv.accelerator_family}\n"
             "- Per-model breakdown:\n"
             f"{per_model_report}\n"
             f"- Comparison: {comparison}"
         )
     
     @tool
-    def deployability_decision(
-        deployment_matrix_json: str
-    ) -> str:
+    def deployability_decision(deployment_matrix_json: str = "") -> str:
         """
-        Partition the model-car YAML into deployable and non-deployable YAMLs.
+        Write info/deployment_matrix.json using deterministic rules (deployability engine).
 
-        Input: deployment_matrix_json should be a JSON array (or single object)
-        with items of the form:
-          {
-            "model_name": "...",
-            "deployable": true/false,
-            "reason": "..."
-          }
-      """
+        Reads models_info.json + gpu_info.txt, infers GPU SKU only from GPU Product lines,
+        evaluates quantization compatibility and minimum tensor parallel size. The
+        deployment_matrix_json argument is ignored (legacy agents may pass "{}").
+        """
         json_path = effective_info_dir / "deployment_matrix.json"
 
+        models_data: dict = {}
+        mi_path = effective_info_dir / "models_info.json"
         try:
-            matrix_obj = json.loads(deployment_matrix_json)
-        except json.JSONDecodeError:
-            return "Error: Provided deployment matrix is not valid JSON."
+            if mi_path.exists():
+                raw = json.loads(mi_path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    models_data = raw
+        except (OSError, json.JSONDecodeError):
+            models_data = {}
+        if not models_data and precomputed_requirements:
+            models_data = precomputed_requirements
 
-        if isinstance(matrix_obj, dict):
-            matrix_list = [matrix_obj]
-        elif isinstance(matrix_obj, list):
-            matrix_list = matrix_obj
-        else:
-            return "Error: Deployment matrix must be a JSON object or array."
+        gpu_text = ""
+        try:
+            gf = effective_info_dir / "gpu_info.txt"
+            if gf.exists():
+                gpu_text = gf.read_text(encoding="utf-8")
+        except OSError:
+            pass
 
-        deployable_models = []
-        non_deployable_models = []
+        reconciled = compute_deployment_matrix(models_data, gpu_text)
 
-        for entry in matrix_list:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(reconciled, f, indent=2)
+
+        deployable_models_r = []
+        non_deployable_models_r = []
+        for entry in reconciled:
             model_name = entry.get("model_name", "unknown")
-            deployable = entry.get("deployable", False)
-            reason = entry.get("reason", "No reason provided.")
-            if deployable:
-                deployable_models.append(f"- {model_name}: Deployable")
+            if entry.get("deployable", False):
+                deployable_models_r.append(f"- {model_name}: Deployable")
             else:
-                non_deployable_models.append(f"- {model_name}: Not Deployable ({reason})")
-
-        deployable_report = "\n".join(deployable_models) if deployable_models else "- None"
-        non_deployable_report = "\n".join(non_deployable_models) if non_deployable_models else "- None"
-        
-        with open(json_path, "w") as f:
-            f.write(deployment_matrix_json)
+                non_deployable_models_r.append(
+                    f"- {model_name}: Not Deployable ({entry.get('reason', 'No reason provided.')})"
+                )
+        deployable_report = "\n".join(deployable_models_r) if deployable_models_r else "- None"
+        non_deployable_report = (
+            "\n".join(non_deployable_models_r) if non_deployable_models_r else "- None"
+        )
 
         return (
             "Deployability Decision Report:\n"
@@ -184,205 +198,28 @@ def build_decision_specialist(
     prompt = """
         You are a deployment decision specialist.
 
+        CRITICAL: Deployable vs non-deployable is computed deterministically by the tool
+        deployability_decision() from models_info.json + gpu_info.txt (GPU Product line,
+        not VRAM-inferred SKU). Do NOT contradict the tool output or invent matrix rows.
+
         You MUST ALWAYS call these tools in order:
-        1. describe_preloaded_requirements() - to get full structured model metadata.
-        2. assess_deployment_fit() - to get GPU capacity and VRAM fit data.
-        3. deployability_decision(deployment_matrix_json=...) - to persist deployability results.
+        1. describe_preloaded_requirements() - structured model metadata.
+        2. assess_deployment_fit() - GPU counts, per-GPU memory, accelerator family,
+           minimum tensor-parallel hints per model.
+        3. deployability_decision() - writes info/deployment_matrix.json (argument ignored;
+           pass "{}"). Matrix rows are authoritative.
 
-        Use all tool outputs together before writing the final answer. Do not skip
-        deployability_decision; it writes info/deployment_matrix.json.
-
-        Your job:
-        1. Evaluate model VRAM requirements vs GPU capacity.
-        2. Evaluate serving arguments against hardware:
-           - tensor_parallel_size
-           - distributed executor backend
-           - max_model_len (KV cache)
-           - GPU memory flags
-           - trust_remote_code
-           - dtype / quantization alignment
-        3. Recommend optimal serving arguments when current ones would cause OOM or misconfiguration.
-        4. If serving arguments are missing for a model (i.e., the model-car entry has no `serving_arguments`):
-        - You MUST treat that as "arguments missing" (not as "do nothing").
-        - Infer the safest / optimal defaults using best vLLM practice, using the following as a baseline:
+        Your narrative job after calling tools:
+        - Summarize deployability_decision output for the human report.
+        - For OPTIMIZED_SERVING_ARGUMENTS_JSON: align `--tensor-parallel-size` and
+          `gpu_count` with the **minimum** TP from assess_deployment_fit (not total GPUs).
+          Baseline args when missing:
             --uvicorn-log-level=info
             --trust-remote-code
-            --tensor-parallel-size=1
             --max-model-len=2048
-            Treat these as a guideline, not a hard rule: you may raise or lower max-model-len or adjust
-            tensor-parallel-size if VRAM / hardware constraints require it.
-        - In this case, you SHOULD still emit an OPTIMIZED_SERVING_ARGUMENTS_JSON block for the model so
-            that the Configuration Specialist can write a concrete `serving_arguments` section into the YAML.
-        5. Produce a deployability decision report, listing each model as:
-           - Deployable
-           - Not Deployable (with reason)
-        6. Build a deployment matrix JSON array with one entry per model and call
-           deployability_decision(...) with that JSON. Each entry must include:
-           - model_name (string)
-           - deployable (true/false)
-           - reason (string, always present)
+        - `supported_arch` in models_info is **CPU image arch**, not GPU SKU.
 
-
-        You MUST reason about the arguments, not just VRAM.
-
-        ----------------------------------------------------------------------
-        REQUIRED deployment verdict format (machine-parseable; do not skip)
-        ----------------------------------------------------------------------
-        Your final answer MUST include a section whose heading is exactly this line:
-
-        ### Deployment Decision
-
-        The line IMMEDIATELY after that heading MUST be exactly ONE of these four lines
-        (nothing else on that line: no bullets, no extra words, no narrative):
-
-        - Verdict: GO
-        - Verdict: NO-GO
-        - Deployment Decision: GO
-        - Deployment Decision: NO-GO
-
-        Put all explanations, bullet lists, deployability narrative, and
-        OPTIMIZED_SERVING_ARGUMENTS_JSON AFTER that single verdict line (separate
-        with a blank line if you like). Downstream tools parse deployment_info.txt
-        using this pattern; a missing or vague first line breaks the UI and reports.
-
-        Valid minimal example (GO):
-
-        ### Deployment Decision
-        Verdict: GO
-
-        Per-model notes and reasoning follow below.
-
-        Valid minimal example (NO-GO):
-
-        ### Deployment Decision
-        Verdict: NO-GO
-
-        Per-model notes and reasoning follow below.
-
-        ----------------------------------------------------------------------
-        Quantization vs accelerator compatibility (aligned with vLLM docs)
-        ----------------------------------------------------------------------
-        Canonical reference: vLLM "Supported Hardware" under Quantization
-        (https://docs.vllm.ai/en/latest/features/quantization/#supported-hardware).
-        When the supervisor includes accelerator information (NVIDIA by generation,
-        AMD GPU / ROCm, Intel GPU, x86 CPU) and you can infer a quantization
-        implementation from the model metadata or name, you MUST cross-check it
-        against the matrix below (same content as that page as of integration).
-
-        NVIDIA generations: Volta (e.g. V100), Turing (e.g. T4), Ampere (e.g. A100),
-        Ada (e.g. L4, L40), Hopper (e.g. H100). Use the AMD GPU column for AMD
-        accelerators (not the NVIDIA columns).
-
-        Implementations:
-
-        - AWQ:
-          - Supported on: Turing, Ampere, Ada, Hopper, Intel GPU, x86 CPU
-          - Not supported on: Volta, AMD GPU
-
-        - GPTQ:
-          - Supported on: Volta, Turing, Ampere, Ada, Hopper, Intel GPU, x86 CPU
-          - Not supported on: AMD GPU
-
-        - Marlin (GPTQ/AWQ/FP8/FP4):
-          - Supported on: Turing (see caveat below), Ampere, Ada, Hopper
-          - Not supported on: Volta, AMD GPU, Intel GPU, x86 CPU
-          - Caveat: Turing does not support Marlin MXFP4.
-
-        - INT8 (W8A8):
-          - Supported on: Turing, Ampere, Ada, Hopper, x86 CPU
-          - Not supported on: Volta, AMD GPU, Intel GPU
-
-        - FP8 (W8A8):
-          - Supported on: Ada, Hopper, AMD GPU
-          - Not supported on: Volta, Turing, Ampere, Intel GPU, x86 CPU
-
-        - bitsandbytes:
-          - Supported on: Volta, Turing, Ampere, Ada, Hopper
-          - Not supported on: AMD GPU, Intel GPU, x86 CPU
-
-        - DeepSpeedFP:
-          - Supported on: Volta, Turing, Ampere, Ada, Hopper
-          - Not supported on: AMD GPU, Intel GPU, x86 CPU
-
-        - GGUF:
-          - Supported on: Volta, Turing, Ampere, Ada, Hopper, AMD GPU
-          - Not supported on: Intel GPU, x86 CPU
-
-        - Other methods (e.g. AQLM) not listed above:
-          - Do not assume incompatibility; check the current vLLM Quantization docs
-            if the model uses a less common scheme.
-
-        Mapping hints:
-        - You may infer quantization implementation from model naming or metadata:
-          - Names like "*.w4a16" or "*.w8a8" often correspond to 4-bit / 8-bit
-            quantization (AWQ/GPTQ/INT8 W8A8-style).
-          - Names containing "fp8" or "FP8" usually map to FP8 (W8A8) kernels.
-          - If the requirements explicitly mention AWQ / GPTQ / GGUF / bitsandbytes,
-            use that directly.
-        - You may infer hardware "generation" from accelerator names:
-          - A100, A30, A10 generally → Ampere
-          - H100 → Hopper
-          - L4, L40, some RTX 40xx → Ada
-          - V100 → Volta
-          - T4 → Turing
-          - AMD Instinct / Radeon data-center GPUs → use AMD GPU column
-
-        How to use this matrix:
-        - If a model’s quantization implementation is NOT supported on the
-          detected accelerator generation, you MUST explicitly flag this as a
-          compatibility problem.
-        - In that case you should either:
-          - Recommend a compatible quantization / model variant if one is likely
-            to exist (e.g. prefer an FP8 kernel only on Ada/Hopper/AMD GPU),
-            OR
-          - Mark the deployment as NO-GO with a clear explanation that the
-            quantization kernel is unsupported on the current hardware.
-        - If the combination IS supported, you can treat quantization as
-          compatible but still consider VRAM and serving arguments (tensor
-          parallel size, max_model_len, etc.).
-
-        Exception:
-        - If no quantization info can be inferred from the model name or
-          metadata, you MUST NOT assume any incompatibility. Proceed to reason
-          about VRAM and serving arguments only.
-
-        ----------------------------------------------------------------------
-        OPTIMIZED_SERVING_ARGUMENTS_JSON
-        ----------------------------------------------------------------------
-        When you emit OPTIMIZED_SERVING_ARGUMENTS_JSON:
-
-        - You MUST treat it as a full replacement for the model's `serving_arguments` block.
-        - You MUST always include a non-empty `args` list if you include `serving_arguments.args`.
-        - Start from the existing arguments in the model-car config (as reported by the
-          Configuration Specialist) and make MINIMAL edits:
-          - remove only flags that are unsafe or unnecessary
-          - add only the flags needed for correctness (e.g. `--tensor-parallel-size=1`
-            for single-GPU)
-        - You MUST NOT recommend an empty args list or remove all flags.
-
-        Example shape:
-
-        ```json
-        {
-          "model_name": "granite-3.1-8b-instruct",
-          "serving_arguments": {
-            "args": [
-              "--uvicorn-log-level=info",
-              "--max-model-len=2048",
-              "--trust-remote-code",
-              "--tensor-parallel-size=1"
-            ],
-            "gpu_count": 1
-          }
-        }
-        ```
-
-        If you don't want to change any arguments, return the same JSON as input.
-
-        In your final reasoning and decision, ALWAYS combine:
-        - VRAM fit vs GPU capacity,
-        - serving arguments vs hardware,
-        - and quantization vs accelerator compatibility from the matrix above.
+        Never infer Ampere vs Hopper from "80 GB" VRAM alone — only gpu_info GPU Product.
         """
 
 
@@ -419,4 +256,4 @@ def build_decision_specialist(
     )
 
 
-__all__ = ["build_decision_specialist"]
+__all__ = ["build_decision_specialist", "min_tensor_parallel_for_weights"]

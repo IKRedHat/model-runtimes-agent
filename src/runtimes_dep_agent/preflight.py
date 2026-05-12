@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 
-REQUIRED_TOOLS = ("oc", "podman", "skopeo")
+REQUIRED_TOOLS = ("oc", "skopeo")
 
 GREEN = "\033[32m"
 RED = "\033[31m"

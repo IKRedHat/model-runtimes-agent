@@ -110,6 +110,7 @@ class LLMAgent:
             self.llm,
             self._extract_final_text,
             self.precomputed_requirements,
+            info_dir=self.info_dir,
         ))
         return specialists
 
@@ -125,7 +126,9 @@ class LLMAgent:
             "- Accelerator Specialist: cluster accelerators, GPU/Spyre profiles, hardware details.\n"
             "- Decision Specialist: GO/NO-GO deployment decisions based on model requirements, accelerator capacity, "
             "  and serving arguments (e.g., tensor_parallel_size, max_model_len, executor backend).\n"
-            "- QA Specialist: runs the Opendatahub model validation test suite and reports results.\n\n"
+            "- QA Specialist: KServe deployment QA using deployment-yamls/ — applies registry secret and InferenceServices "
+            "in namespace model-validation (sequential, smallest image first), monitors readiness and logs, "
+            "and self-heals within bounded retries; reports QA_OK / QA_ERROR.\n\n"
 
             "A model-car configuration has already been processed by the host program. "
             "You can access its details only via your tools; never ask the user for YAML or file paths.\n"
@@ -159,6 +162,10 @@ class LLMAgent:
             "       above and SKIP calling the QA Specialist.\n"
             "  3) Use the Decision Specialist to decide GO or NO-GO, taking into account GPU capacity, serving arguments,\n"
             "     and any environment health issues reported by the Accelerator Specialist.\n"
+            "     - Authoritative deployability: the Decision Specialist persists `deployment_matrix.json` in the run info\n"
+            "       directory (deterministic per-model rows). If every row has deployable=true and the Accelerator step\n"
+            "       did not report authentication or connectivity failure, your ### Deployment Decision MUST state **GO**\n"
+            "       and align reasoning with those rows — do not output NO-GO that contradicts the matrix.\n"
             "     - The Decision Specialist may also propose optimized serving arguments (usually as JSON) when current\n"
             "       arguments are suboptimal or unsafe (e.g., risk of OOM).\n"
             "  4) If the Decision Specialist explicitly recommends optimized serving arguments and the environment is\n"
@@ -166,7 +173,7 @@ class LLMAgent:
             "     optimized arguments to the model-car YAML (for example, by passing the JSON blob to its tool that updates\n"
             "     serving_arguments). Do this BEFORE calling QA so that validation uses the optimized configuration.\n"
             "  5) If you are issuing a deployment verdict and the environment is healthy, you SHOULD normally call the\n"
-            "     QA Specialist to run validation tests and include the results, unless the user explicitly says to skip QA.\n\n"
+            "     QA Specialist to run KServe deployment validation and include the results, unless the user explicitly says to skip QA.\n\n"
 
             "Tool usage guidelines:\n"
             "- You may call the Configuration Specialist more than once in a single run:\n"
