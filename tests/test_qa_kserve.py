@@ -337,6 +337,29 @@ class TestRemediationJson(unittest.TestCase):
         self.assertEqual(plan.cpu_request, "2")
 
 
+class TestPostDeploySsrf(unittest.TestCase):
+    def test_ssrf_blocks_loopback(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+
+        msg = _inference_url_ssrf_block_reason("http://127.0.0.1")
+        self.assertIsNotNone(msg)
+        assert msg is not None
+        self.assertIn("127.0.0.1", msg)
+
+    def test_ssrf_blocks_non_http_scheme(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+
+        msg = _inference_url_ssrf_block_reason("file:///etc/passwd")
+        self.assertIsNotNone(msg)
+        assert msg is not None
+        self.assertIn("scheme", msg.lower())
+
+    def test_ssrf_allows_public_example(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+
+        self.assertIsNone(_inference_url_ssrf_block_reason("https://example.com"))
+
+
 class TestPipelineDefaults(unittest.TestCase):
     def test_default_three_total_attempts(self) -> None:
         sig = inspect.signature(run_kserve_deployment_qa)

@@ -444,10 +444,9 @@ def _section_deployment(
 
     matrix_html = ""
     safe_matrix = [e for e in (matrix if isinstance(matrix, list) else []) if isinstance(e, dict)]
-    models_map = models if isinstance(models, dict) else {}
     if safe_matrix:
-        deployable = [e for e in safe_matrix if _matrix_entry_fully_deployable(e, models_map)]
-        blocked = [e for e in safe_matrix if not _matrix_entry_fully_deployable(e, models_map)]
+        deployable = [e for e in safe_matrix if e.get("deployable") is True]
+        blocked = [e for e in safe_matrix if e.get("deployable") is not True]
         matrix_html += '<div class="matrix-grid">'
         matrix_html += '<div class="matrix-col"><h4>Deployable</h4>'
         if deployable:

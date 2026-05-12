@@ -2,18 +2,101 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
-import os
+import socket
 import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .oc_cli import run_oc
 
 logger = logging.getLogger(__name__)
+
+# Blocked for post-deploy HTTP client (SSRF): RFC1918, loopback, metadata, ULA, etc.
+_V4_SSRF_NETWORKS: tuple[ipaddress.IPv4Network, ...] = (
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.169.254/32"),
+    ipaddress.ip_network("0.0.0.0/32"),
+)
+_V6_SSRF_NETWORKS: tuple[ipaddress.IPv6Network, ...] = (
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::ffff:0:0/96"),
+)
+
+
+def _ipv4_ssrf_blocked(addr: ipaddress.IPv4Address) -> bool:
+    return any(addr in net for net in _V4_SSRF_NETWORKS)
+
+
+def _ipv6_ssrf_blocked(addr: ipaddress.IPv6Address) -> bool:
+    if any(addr in net for net in _V6_SSRF_NETWORKS):
+        return True
+    mapped = addr.ipv4_mapped
+    if mapped is not None:
+        return _ipv4_ssrf_blocked(mapped)
+    return False
+
+
+def _ip_ssrf_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if addr.version == 4:
+        return _ipv4_ssrf_blocked(addr)
+    return _ipv6_ssrf_blocked(addr)
+
+
+def _inference_url_ssrf_block_reason(url: str) -> str | None:
+    """
+    Return a human-readable block reason, or None if ``url`` is http(s) and
+    resolved addresses are not in blocked ranges.
+    """
+    parsed = urlparse(url.strip())
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        return f"Blocked non-HTTP(S) scheme: {parsed.scheme!r}"
+    host = parsed.hostname
+    if not host:
+        return "Blocked URL: missing hostname"
+
+    offenders: list[str] = []
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        return f"Blocked: DNS resolution failed for {host!r}: {e}"
+
+    if not infos:
+        return f"Blocked: no DNS results for {host!r}"
+
+    seen: set[str] = set()
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        ip_s = sockaddr[0]
+        if not isinstance(ip_s, str) or ip_s in seen:
+            continue
+        seen.add(ip_s)
+        try:
+            addr = ipaddress.ip_address(ip_s)
+        except ValueError:
+            return f"Blocked: invalid resolved address {ip_s!r}"
+        if _ip_ssrf_blocked(addr):
+            offenders.append(addr.compressed)
+
+    if offenders:
+        uniq = ", ".join(dict.fromkeys(offenders))
+        return (
+            f"Blocked SSRF-risk: host {host!r} resolves to forbidden address(es): {uniq}"
+        )
+    return None
 
 
 def resolve_inference_base_url(isvc_name: str, namespace: str, log: list[str]) -> str:
@@ -31,13 +114,13 @@ def resolve_inference_base_url(isvc_name: str, namespace: str, log: list[str]) -
             st = doc.get("status") or {}
             url = (st.get("url") or "").strip()
             if url:
-                return _normalize_base_url(url)
+                return _normalize_base_url(url, log)
             comps = st.get("components") or {}
             pred = comps.get("predictor")
             if isinstance(pred, dict):
                 u = (pred.get("url") or "").strip()
                 if u:
-                    return _normalize_base_url(u)
+                    return _normalize_base_url(u, log)
         except json.JSONDecodeError:
             pass
 
@@ -73,15 +156,26 @@ def resolve_inference_base_url(isvc_name: str, namespace: str, log: list[str]) -
         candidates.append((score, f"{scheme}://{host}"))
     candidates.sort(key=lambda x: -x[0])
     if candidates:
-        return candidates[0][1]
+        cand = candidates[0][1].rstrip("/")
+        reason = _inference_url_ssrf_block_reason(cand)
+        if reason:
+            _append(log, reason)
+            return ""
+        return cand
     return ""
 
 
-def _normalize_base_url(url: str) -> str:
+def _normalize_base_url(url: str, log: list[str]) -> str:
     u = url.strip()
     if u.startswith("http://") or u.startswith("https://"):
-        return u.rstrip("/")
-    return f"https://{u}".rstrip("/")
+        norm = u.rstrip("/")
+    else:
+        norm = f"https://{u}".rstrip("/")
+    reason = _inference_url_ssrf_block_reason(norm)
+    if reason:
+        _append(log, reason)
+        return ""
+    return norm
 
 
 def _append(log: list[str], msg: str) -> None:
@@ -144,35 +238,19 @@ def post_chat_completions_smoke(
     """
     POST /v1/chat/completions (OpenAI-compatible). Returns (ok, detail_or_response_snippet).
 
+    Before any network I/O, ``base_url`` is checked by ``_inference_url_ssrf_block_reason``
+    (http/https only, DNS resolution, blocked private/link-local/metadata-style addresses).
+    On failure this returns ``(False, "<Blocked …>")`` with the same message string used
+    when resolving inference URLs.
+
     TLS: verified against the default trust store unless ``tls_ca_file`` is set
     (``ssl.create_default_context(cafile=...)``) or ``tls_insecure`` is True
     (explicit dev-only; disables verification).
     """
-def post_chat_completions_smoke(
-    base_url: str,
-    *,
-    model_id: str,
-    user_message: str,
-    max_tokens: int,
-    timeout_s: float,
-    verify_tls: bool,
-    log: list[str],
-) -> tuple[bool, str]:
-    from urllib.parse import urlparse
-    parsed = urlparse(base_url)
-    blocked_hosts = {
-        "169.254.169.254", "metadata.google.internal",
-        "localhost", "127.0.0.1", "[::1]",
-    }
-    if parsed.hostname in blocked_hosts:
-        return False, f"Blocked internal/metadata host: {parsed.hostname}"
-    if parsed.hostname and (
-        parsed.hostname.startswith("10.") or
-        parsed.hostname.startswith("192.168.") or
-        parsed.hostname.startswith("172.16.")
-    ):
-        return False, f"Blocked private network: {parsed.hostname}"
-    
+    block = _inference_url_ssrf_block_reason(base_url.rstrip("/"))
+    if block:
+        return False, block
+
     endpoint = base_url.rstrip("/") + "/v1/chat/completions"
     payload: dict[str, Any] = {
         "model": model_id,
