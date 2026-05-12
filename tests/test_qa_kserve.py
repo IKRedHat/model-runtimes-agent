@@ -2,19 +2,44 @@
 
 from __future__ import annotations
 
+import base64
+import inspect
 import json
 import unittest
+from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
+from runtimes_dep_agent.qa_kserve.pipeline import run_kserve_deployment_qa
+from runtimes_dep_agent.qa_kserve.remediation_llm import (
+    parse_llm_json,
+    validate_and_build_plan,
+)
 from runtimes_dep_agent.qa_kserve.render import (
     format_args_block,
     halve_max_model_len_args,
+    load_serving_runtime_template,
     normalize_dockerconfig_b64,
     render_inference_service,
+    render_serving_runtime,
     sanitize_k8s_name,
     validate_yaml_document,
 )
 from runtimes_dep_agent.qa_kserve import oc_cli
+from runtimes_dep_agent.validators.accelerator_validator import (
+    normalize_gpu_provider_for_vllm_template,
+)
+
+
+class TestNormalizeGpuProviderForVllmTemplate(unittest.TestCase):
+    def test_cpu_and_empty_use_cuda_template_key(self) -> None:
+        self.assertEqual(normalize_gpu_provider_for_vllm_template("CPU"), "NONE")
+        self.assertEqual(normalize_gpu_provider_for_vllm_template(""), "NONE")
+        self.assertEqual(normalize_gpu_provider_for_vllm_template(None), "NONE")
+
+    def test_canonical_providers(self) -> None:
+        self.assertEqual(normalize_gpu_provider_for_vllm_template("nvidia"), "NVIDIA")
+        self.assertEqual(normalize_gpu_provider_for_vllm_template("AMD"), "AMD")
+        self.assertEqual(normalize_gpu_provider_for_vllm_template("SPYRE_x86"), "SPYRE_x86")
 
 
 class TestSanitizeName(unittest.TestCase):
@@ -29,6 +54,19 @@ class TestDockerconfigB64(unittest.TestCase):
         b64 = normalize_dockerconfig_b64(raw)
         self.assertNotIn("{", b64)
         self.assertEqual(normalize_dockerconfig_b64("  dGVzdA==  "), "dGVzdA==")  # already b64
+
+    def test_strips_pipe_suffix_after_json(self) -> None:
+        """Matches K8s error: invalid character '|' after top-level value."""
+        raw = '{"auths":{}}|garbage or second json'
+        b64 = normalize_dockerconfig_b64(raw)
+        decoded = base64.b64decode(b64).decode()
+        self.assertEqual(json.loads(decoded), {"auths": {}})
+
+    def test_pipe_separated_base64_uses_first_chunk(self) -> None:
+        first = normalize_dockerconfig_b64('{"auths":{}}')
+        combined = first + "|YWdvcmFnZQ=="
+        out = normalize_dockerconfig_b64(combined)
+        self.assertEqual(out, first)
 
 
 class TestClassifyPods(unittest.TestCase):
@@ -71,6 +109,42 @@ class TestClassifyPods(unittest.TestCase):
         }
         kind, _ = classify_pod_json(json.dumps(pod))
         self.assertEqual(kind, "image_pull")
+
+
+class TestRenderServingRuntime(unittest.TestCase):
+    def test_substitutions(self) -> None:
+        tmpl = """name: __SERVING_RUNTIME_NAME__
+namespace: __NAMESPACE__
+image: __VLLM_RUNTIME_IMAGE__
+display: __SERVING_RUNTIME_DISPLAY_NAME__
+fmt: __MODEL_FORMAT_NAME__
+keep: {{.Name}}
+"""
+        out = render_serving_runtime(
+            template_text=tmpl,
+            namespace="model-validation",
+            serving_runtime_name="vllm-runtime",
+            vllm_runtime_image="reg.io/vllm@sha256:abc",
+            model_format_name="vLLM",
+        )
+        self.assertIn("name: vllm-runtime", out)
+        self.assertIn("reg.io/vllm@sha256:abc", out)
+        self.assertIn("fmt: vLLM", out)
+        self.assertIn("{{.Name}}", out)
+
+    def test_repo_template_roundtrip(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        tmpl = load_serving_runtime_template(repo)
+        body = render_serving_runtime(
+            template_text=tmpl,
+            namespace="model-validation",
+            serving_runtime_name="vllm-runtime",
+            vllm_runtime_image="quay.io/vllm:0",
+            model_format_name="vLLM",
+        )
+        doc = validate_yaml_document(body)
+        self.assertEqual(doc["kind"], "ServingRuntime")
+        self.assertEqual(doc["metadata"]["namespace"], "model-validation")
 
 
 class TestRenderInference(unittest.TestCase):
@@ -142,6 +216,76 @@ class TestOcAllowlist(unittest.TestCase):
     def test_rejects_unknown(self) -> None:
         with self.assertRaises(ValueError):
             oc_cli.run_oc(["exec", "pod", "x"])
+
+
+class TestRemediationJson(unittest.TestCase):
+    def test_parse_fenced_json(self) -> None:
+        raw = 'Here you go:\n```json\n{"summary": "x", "serving_arguments": ["--a=1"], "resources": {"cpu_request": "1", "memory_request": "1Gi", "cpu_limit": "2", "memory_limit": "2Gi", "gpu_count": 0}}\n```'
+        obj = parse_llm_json(raw)
+        self.assertIsNotNone(obj)
+        assert obj is not None
+        self.assertEqual(obj.get("summary"), "x")
+
+    def test_validate_clamps_gpu(self) -> None:
+        raw = {
+            "summary": "too many gpus",
+            "serving_arguments": ["--max-model-len=1024"],
+            "resources": {
+                "cpu_request": "1",
+                "memory_request": "4Gi",
+                "cpu_limit": "2",
+                "memory_limit": "8Gi",
+                "gpu_count": 99,
+            },
+        }
+        plan = validate_and_build_plan(
+            raw,
+            max_gpu=4,
+            fallback_args=["--x"],
+            fallback_cpu_req="500m",
+            fallback_mem_req="1Gi",
+            fallback_cpu_lim="1",
+            fallback_mem_lim="2Gi",
+            fallback_gpu=1,
+        )
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(plan.gpu_count, 4)
+
+    def test_invalid_quantity_falls_back(self) -> None:
+        raw = {
+            "summary": "bad qty",
+            "serving_arguments": ["--ok=1"],
+            "resources": {
+                "cpu_request": "not-a-k8s-qty-" + "x" * 50,
+                "memory_request": "4Gi",
+                "cpu_limit": "2",
+                "memory_limit": "8Gi",
+                "gpu_count": 0,
+            },
+        }
+        plan = validate_and_build_plan(
+            raw,
+            max_gpu=8,
+            fallback_args=["--ok=1"],
+            fallback_cpu_req="2",
+            fallback_mem_req="4Gi",
+            fallback_cpu_lim="4",
+            fallback_mem_lim="8Gi",
+            fallback_gpu=0,
+        )
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(plan.cpu_request, "2")
+
+
+class TestPipelineDefaults(unittest.TestCase):
+    def test_default_three_total_attempts(self) -> None:
+        sig = inspect.signature(run_kserve_deployment_qa)
+        d = sig.parameters["max_heal_retries"].default
+        self.assertEqual(d, 2)
+        # Loop uses range(max_heal_retries + 1) -> 3 attempts
+        self.assertEqual(list(range(d + 1)), [0, 1, 2])
 
 
 if __name__ == "__main__":

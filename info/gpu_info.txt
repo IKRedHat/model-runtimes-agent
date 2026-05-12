@@ -5,6 +5,5 @@
 • Per-GPU Memory: 40.0 GB GB
 • Allocatable GPUs: 8
 • Node RAM: 1203.6 GB
-• Node Storage: 288.2 GB
-• Node Name: ip-10-0-61-165.ec2.internal
-
+• Node Storage: 867.7 GB
+• Node Name: ip-10-0-49-106.ec2.internal

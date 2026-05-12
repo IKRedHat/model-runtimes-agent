@@ -1,32 +1,7 @@
 [
   {
-    "model_name": "modelcar-granite-4-0-h-small",
+    "model_name": "granite",
     "deployable": true,
-    "reason": "Model fits on 2 GPUs. Serving arguments must be added."
-  },
-  {
-    "model_name": "modelcar-ministral-3-14b-instruct-2512",
-    "deployable": true,
-    "reason": "Model fits on 1 GPU. Serving arguments must be added."
-  },
-  {
-    "model_name": "modelcar-qwen3-next-80b-a3b-instruct-quantized-w4a16",
-    "deployable": true,
-    "reason": "Model fits on 2 GPUs with w4a16 quantization. Serving arguments must be added."
-  },
-  {
-    "model_name": "modelcar-granite-4-0-h-small-fp8-dynamic",
-    "deployable": false,
-    "reason": "Hardware Incompatibility: FP8 quantization requires NVIDIA Hopper or Ada generation GPUs."
-  },
-  {
-    "model_name": "modelcar-qwen3-next-80b-a3b-instruct-fp8",
-    "deployable": false,
-    "reason": "Hardware Incompatibility: FP8 quantization requires NVIDIA Hopper or Ada generation GPUs."
-  },
-  {
-    "model_name": "modelcar-qwen3-vl-235b-a22b-instruct-nvfp4",
-    "deployable": false,
-    "reason": "Hardware Incompatibility: FP4 quantization requires NVIDIA Hopper or Ada generation GPUs."
+    "reason": "Deployable: Name suggests W4A16/W8A8-style quantization; treat as compatible pending runtime (verify AWQ/GPTQ paths). Minimum vLLM tensor-parallel-size \u2248 1 from ceil(4.59 GB / 40.0 GB per GPU) using model_size_gb (weights-only proxy when required_vram_gb missing; reserve KV cache separately); allocatable GPUs = 8. (Weights-only; tune max-model-len for KV cache.) Accelerator inferred from GPU Product as 'ampere' (not from VRAM size). Recommend --tensor-parallel-size=1 and gpu_count=1."
   }
 ]

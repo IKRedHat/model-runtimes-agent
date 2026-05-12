@@ -35,6 +35,7 @@ from .preflight import (
     RESET,
 )
 from runtimes_dep_agent.agent.llm_agent import LLMAgent
+from runtimes_dep_agent.validators.matrix_prose_sync import sync_info_dir_prose_with_matrix
 
 
 DEFAULT_CONFIG_PATH = "config-yaml/sample_modelcar_config.yaml"
@@ -318,11 +319,16 @@ def main() -> None:
         with open(summary_path, "w") as f:
             f.write(output_text)
 
+        sync_info_dir_prose_with_matrix(info_dir)
+        final_output = (
+            summary_path.read_text(encoding="utf-8") if summary_path.exists() else output_text
+        )
+
         # Print final report
         print(f"\n{'=' * 60}")
         print(f"{BOLD}  SUPERVISOR REPORT{RESET}")
         print(f"{'=' * 60}\n")
-        print(output_text)
+        print(final_output)
         print(f"\n{'=' * 60}")
 
         # 6. Always generate report
@@ -333,7 +339,7 @@ def main() -> None:
             report_path = generate_html_report(
                 info_dir=info_dir,
                 output_path=Path(args.report_output),
-                agent_output=output_text,
+                agent_output=final_output,
                 preflight_results=[r.to_dict() for r in results],
             )
             progress.success(f"Report saved to {report_path}")

@@ -10,6 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..validators.matrix_prose_sync import (
+    align_prose_with_deployability_matrix,
+    all_matrix_deployable,
+    safe_matrix_entries,
+    stored_prose_contradicts_matrix_go,
+)
 
 _LOGO_PATH = Path(__file__).parent / "openshift_ai_logo.png"
 
@@ -29,7 +35,19 @@ def generate_html_report(
     deployment_text = _load_text(info_dir / "deployment_info.txt")
     summary_text = agent_output or _load_text(info_dir / "supervisor_summary.txt")
 
-    verdict = _extract_verdict(deployment_text)
+    safe_m = safe_matrix_entries(matrix)
+    all_deployable = all_matrix_deployable(safe_m)
+    narrative_note = ""
+    if all_deployable and stored_prose_contradicts_matrix_go(deployment_text, summary_text):
+        deployment_text, summary_text = align_prose_with_deployability_matrix(
+            deployment_text, summary_text, safe_m, gpu_text
+        )
+        narrative_note = (
+            "Supervisor and deployment decision text below was aligned with the "
+            "deployability matrix (deployment_matrix.json) and gpu_info.txt."
+        )
+
+    verdict = "GO" if all_deployable else _extract_verdict(deployment_text)
     gpu_nodes = _parse_gpu_nodes(gpu_text)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     logo_b64 = _load_logo_b64()
@@ -38,7 +56,7 @@ def generate_html_report(
         _section_preflight(preflight_results),
         _section_configuration(models),
         _section_accelerator(gpu_nodes),
-        _section_deployment(verdict, deployment_text, matrix),
+        _section_deployment(verdict, deployment_text, matrix, narrative_note),
         _section_qa(summary_text),
         _section_full_output(summary_text),
     ]
@@ -187,7 +205,13 @@ def _md_to_html(text: str) -> str:
             result_lines.append("")
             continue
 
-        # Headings
+        # Headings (check #### before ### so four-hash lines are not misparsed)
+        if stripped.startswith("#### "):
+            if in_list:
+                result_lines.append("</ul>")
+                in_list = False
+            result_lines.append(f'<h5 class="md-h4">{_inline_md(stripped[5:])}</h5>')
+            continue
         if stripped.startswith("### "):
             if in_list:
                 result_lines.append("</ul>")
@@ -377,8 +401,14 @@ def _section_accelerator(gpu_nodes: list[dict]) -> str:
     </section>"""
 
 
-def _section_deployment(verdict: str, deployment_text: str, matrix: list) -> str:
+def _section_deployment(
+    verdict: str, deployment_text: str, matrix: list, narrative_note: str = ""
+) -> str:
     badge = _verdict_badge(verdict)
+
+    note_html = ""
+    if narrative_note.strip():
+        note_html = f'<p class="callout-reconcile">{_esc(narrative_note.strip())}</p>'
 
     matrix_html = ""
     safe_matrix = [e for e in (matrix if isinstance(matrix, list) else []) if isinstance(e, dict)]
@@ -410,6 +440,7 @@ def _section_deployment(verdict: str, deployment_text: str, matrix: list) -> str
     return f"""
     <section id="deployment">
       <h2>Deployment Decision {badge}</h2>
+      {note_html}
       {matrix_html}
       {detail_html}
     </section>"""
@@ -551,6 +582,15 @@ body {
 .badge-nogo { background: var(--red); color: #fff; }
 .badge-unknown { background: var(--yellow); color: #333; }
 
+.callout-reconcile {
+  background: #e8f4fd;
+  border-left: 4px solid var(--accent);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
 /* Sections */
 section {
   background: var(--surface);
@@ -616,6 +656,7 @@ code, code.inline { background: #eef1f5; padding: 2px 6px; border-radius: 4px; f
 .rendered-md h2.md-h1 { font-size: 1.2rem; margin: 20px 0 8px; color: var(--sidebar-bg); border-bottom: 2px solid var(--border); padding-bottom: 6px; }
 .rendered-md h3.md-h2 { font-size: 1.05rem; margin: 18px 0 6px; color: var(--sidebar-bg); }
 .rendered-md h4.md-h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--accent); }
+.rendered-md h5.md-h4 { font-size: 0.88rem; margin: 12px 0 4px; color: var(--text); font-weight: 600; }
 .rendered-md p { margin: 6px 0; }
 .rendered-md ul.md-list { margin: 6px 0 6px 20px; }
 .rendered-md ul.md-list li { margin-bottom: 4px; }

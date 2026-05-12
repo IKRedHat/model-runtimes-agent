@@ -88,6 +88,9 @@ Pipfile.lock
 # poetry
 poetry.lock
 
+# uv
+uv.lock
+
 # pdm
 .pdm.toml
 
@@ -183,3 +186,12 @@ demo-logs/
 *.pkl
 *.model
 *.h5
+
+# Agent-generated reports and scratch analysis (repo root)
+/test-report.html
+/analysis.md
+
+# Local KServe deployment outputs (keep *.template; do not commit secrets)
+deployment-yamls/oci-secret.yaml
+deployment-yamls/inference-service.yaml
+deployment-yamls/serving-runtime.yaml

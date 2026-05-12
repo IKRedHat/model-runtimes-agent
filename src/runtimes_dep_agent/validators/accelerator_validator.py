@@ -561,6 +561,39 @@ def get_vllm_runtime_image_from_template(
     return image
 
 
+_VLLM_TEMPLATE_KEYS = frozenset(
+    {"NVIDIA", "AMD", "SPYRE_x86", "SPYRE_s390x", "INTEL", "NONE"},
+)
+
+
+def normalize_gpu_provider_for_vllm_template(gpu_provider: str | None) -> str:
+    """
+    Map QA / UI strings to keys accepted by :func:`get_vllm_runtime_image_from_template`.
+
+    CPU, empty, and unrecognized values map to ``NONE`` (RHOAI ``vllm-cuda-runtime-template``).
+    """
+    if gpu_provider is None:
+        return "NONE"
+    p = str(gpu_provider).strip()
+    if not p:
+        return "NONE"
+    if p in _VLLM_TEMPLATE_KEYS:
+        return p
+    pu = p.upper()
+    if pu in ("CPU", "NONE"):
+        return "NONE"
+    if pu == "NVIDIA":
+        return "NVIDIA"
+    if pu == "AMD":
+        return "AMD"
+    if pu == "INTEL":
+        return "INTEL"
+    if "SPYRE" in pu:
+        if "S390" in pu or "390" in pu:
+            return "SPYRE_s390x"
+        return "SPYRE_x86"
+    return "NONE"
+
 
 # Test the functions
 if __name__ == "__main__":

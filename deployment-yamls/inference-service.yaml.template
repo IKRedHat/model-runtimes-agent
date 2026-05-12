@@ -1,27 +1,39 @@
 # KServe InferenceService — placeholders replaced by qa_kserve pipeline.
+# This template mirrors deployment-yamls/inference-service.yaml (dashboard visibility, raw mode, tolerations, etc.)
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: __ISVC_NAME__
   namespace: model-validation
   annotations:
+    openshift.io/display-name: __ISVC_NAME__
+    serving.kserve.io/deploymentMode: RawDeployment
     deployment.qa/vllm-runtime-image: "__VLLM_RUNTIME_IMAGE__"
+  labels:
+    networking.kserve.io/visibility: exposed
+    opendatahub.io/dashboard: "true"
 spec:
   predictor:
-    minReplicas: 1
-    maxReplicas: 1
+    automountServiceAccountToken: false
 __IMAGE_PULL_SECRETS_BLOCK__
+    maxReplicas: 1
+    minReplicas: 1
     model:
-      runtime: __SERVING_RUNTIME_NAME__
       modelFormat:
         name: __MODEL_FORMAT__
-      storageUri: "__MODEL_IMAGE__"
+      runtime: __SERVING_RUNTIME_NAME__
+      storageUri: __MODEL_IMAGE__
 __ARGS_BLOCK__
-    resources:
-      requests:
-        cpu: "__CPU_REQUEST__"
-        memory: "__MEMORY_REQUEST__"
+      resources:
+        requests:
+          cpu: "__CPU_REQUEST__"
+          memory: __MEMORY_REQUEST__
 __GPU_REQUESTS_LINE__
-      limits:
-        cpu: "__CPU_LIMIT__"
-        memory: "__MEMORY_LIMIT__"
+        limits:
+          cpu: "__CPU_LIMIT__"
+          memory: __MEMORY_LIMIT__
+__GPU_LIMITS_LINE__
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule

@@ -108,11 +108,14 @@ def build_qa_specialist(
         """
         Deploy deployable models to namespace model-validation using deployment-yamls templates:
         apply OCI pull secret, then InferenceServices in ascending model image size order.
-        Monitors readiness and logs; retries with increased memory and reduced --max-model-len on failure.
+        Monitors readiness, events, and container logs; on failure proposes remediation (serving args +
+        CPU/memory/GPU) via the specialist LLM when available, otherwise uses bounded heuristic retries.
 
         Requires environment: KUBECONFIG, OCI_REGISTRY_PULL_SECRET (base64 .dockerconfigjson or raw JSON),
         REGISTRY_HOST (or a single registry inferable from model-car). Optional: VLLM_RUNTIME_IMAGE,
-        KSERVE_SERVING_RUNTIME_NAME, KSERVE_MODEL_FORMAT, QA_PER_MODEL_TIMEOUT_S.
+        KSERVE_SERVING_RUNTIME_NAME, KSERVE_MODEL_FORMAT, QA_PER_MODEL_TIMEOUT_S, QA_MAX_GPU_COUNT,
+        QA_SKIP_SERVING_RUNTIME_APPLY (set to 1 to skip applying serving-runtime.yaml.template when the runtime already exists).
+        Post-deploy: OpenAI-style smoke POST to /v1/chat/completions (skip with QA_SKIP_POST_DEPLOY_SMOKE=1), scale-to-zero (skip with QA_SKIP_SCALE_TO_ZERO=1), delete namespace on full success (skip with QA_SKIP_NAMESPACE_DELETE=1). Optional QA_SMOKE_MODEL_ID, QA_SMOKE_USER_MESSAGE, QA_SMOKE_MAX_TOKENS, QA_SMOKE_TIMEOUT_S, QA_SMOKE_TLS_VERIFY.
 
         :param runtime_image: vLLM / runtime image used for annotations and validation (see accelerator JSON).
         :param gpu_provider: e.g. NVIDIA, AMD — affects GPU resource requests.
@@ -143,6 +146,7 @@ def build_qa_specialist(
             precomputed_requirements=precomputed_requirements,
             info_dir=effective_info_dir,
             repo_root=repo_root,
+            llm=llm,
         )
 
     prompt = (
@@ -152,7 +156,8 @@ def build_qa_specialist(
         "creates namespace model-validation if needed, applies the registry pull secret, deploys each "
         "deployable model from deployment_matrix.json + generated model-car YAML in ascending container "
         "image size order, waits for Ready, tails storage-initializer and kserve-container logs when useful, "
-        "and retries with higher memory and adjusted --max-model-len on recoverable failures.\n\n"
+        "and retries with LLM-proposed args/resources (or heuristic memory / max-model-len tuning) on "
+        "recoverable failures.\n\n"
         "When invoked by the supervisor:\n"
         "1. Call `run_kserve_deployment_qa_tool` with the runtime_image from the supervisor (accelerator vLLM image) "
         "and gpu_provider.\n"
