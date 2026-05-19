@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +43,15 @@ def _default_max_gpu() -> int:
         return max(0, int(raw))
     except ValueError:
         return 8
+
+
+def _llm_timeout_s() -> float:
+    """Timeout for LLM remediation invoke, configurable via QA_LLM_TIMEOUT_S."""
+    raw = os.environ.get("QA_LLM_TIMEOUT_S", "120").strip()
+    try:
+        return max(10.0, float(raw))
+    except ValueError:
+        return 120.0
 
 
 def _clamp_gpu(n: int, cap: int) -> int:
@@ -206,9 +216,24 @@ def propose_remediation(
                 model = bind(temperature=0)
             except TypeError:
                 model = llm
-        out = model.invoke(
+        timeout = _llm_timeout_s()
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(
+            model.invoke,
             [SystemMessage(content=sys_msg), HumanMessage(content=human_msg)],
         )
+        try:
+            out = future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            pool.shutdown(wait=False)
+            logger.warning(
+                "LLM remediation timed out after %.0fs — falling back to heuristic",
+                timeout,
+            )
+            return None
+        else:
+            pool.shutdown(wait=False)
+
         content = getattr(out, "content", out)
         if isinstance(content, list):
             content = "".join(

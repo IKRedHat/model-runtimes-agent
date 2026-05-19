@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,48 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestRemediationTimeout(unittest.TestCase):
+    """LLM remediation must time out gracefully instead of blocking forever."""
+
+    def test_timeout_returns_none(self) -> None:
+        import time
+        from runtimes_dep_agent.qa_kserve.remediation_llm import propose_remediation
+
+        class SlowLLM:
+            def invoke(self, messages):
+                time.sleep(30)
+                return "should not reach here"
+
+        with unittest.mock.patch.dict("os.environ", {"QA_LLM_TIMEOUT_S": "1"}):
+            result = propose_remediation(
+                SlowLLM(),
+                context={"model_name": "test", "max_gpu_allowed": 4},
+                fallback_args=["--x"],
+                fallback_cpu_req="2",
+                fallback_mem_req="8Gi",
+                fallback_cpu_lim="4",
+                fallback_mem_lim="16Gi",
+                fallback_gpu=1,
+            )
+        self.assertIsNone(result)
+
+    def test_llm_timeout_env_default(self) -> None:
+        from runtimes_dep_agent.qa_kserve.remediation_llm import _llm_timeout_s
+        with unittest.mock.patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("QA_LLM_TIMEOUT_S", None)
+            self.assertEqual(_llm_timeout_s(), 120.0)
+
+    def test_llm_timeout_env_custom(self) -> None:
+        from runtimes_dep_agent.qa_kserve.remediation_llm import _llm_timeout_s
+        with unittest.mock.patch.dict("os.environ", {"QA_LLM_TIMEOUT_S": "30"}):
+            self.assertEqual(_llm_timeout_s(), 30.0)
+
+    def test_llm_timeout_env_minimum(self) -> None:
+        from runtimes_dep_agent.qa_kserve.remediation_llm import _llm_timeout_s
+        with unittest.mock.patch.dict("os.environ", {"QA_LLM_TIMEOUT_S": "3"}):
+            self.assertEqual(_llm_timeout_s(), 10.0)
 
 
 if __name__ == "__main__":
