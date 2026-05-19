@@ -279,6 +279,22 @@ def _max_gpu_allowed() -> int:
         return 8
 
 
+def _reconcile_llm_plan_with_provider(
+    plan_gpu: int,
+    plan_resources: tuple[str, str, str, str],
+    gpu_provider: str,
+    current_mem_bump: int,
+    max_gpu: int,
+) -> tuple[int, bool, tuple[str, str, str, str] | None, int]:
+    """Reconcile LLM remediation plan with GPU provider constraints.
+
+    Returns (gpu_count, resource_pick, fixed_res, mem_bump).
+    """
+    if gpu_provider.upper() in ("CPU", "NONE", ""):
+        return 0, True, None, current_mem_bump + 1
+    return min(plan_gpu, max_gpu), False, plan_resources, current_mem_bump
+
+
 def _load_deployment_matrix(matrix_path: Path) -> list[dict]:
     if not matrix_path.exists():
         return []
@@ -670,17 +686,17 @@ def run_kserve_deployment_qa(
                 if plan is not None:
                     heal_label = "llm"
                     cur_args = list(plan.serving_arguments)
-                    fixed_res = (
+                    plan_res = (
                         plan.cpu_request,
                         plan.memory_request,
                         plan.cpu_limit,
                         plan.memory_limit,
                     )
-                    resource_pick = False
-                    plan_gpu = plan.gpu_count
-                    if gpu_provider.upper() in ("CPU", "NONE", ""):
-                        plan_gpu = 0
-                    gpu_n = plan_gpu
+                    gpu_n, resource_pick, fixed_res, mem_bump = (
+                        _reconcile_llm_plan_with_provider(
+                            plan.gpu_count, plan_res, gpu_provider, mem_bump, max_g,
+                        )
+                    )
                     plan_summary = plan.summary
                     last_llm_summary = plan.summary
 
