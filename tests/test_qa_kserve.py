@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,62 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestDeploymentMatrixSchema(unittest.TestCase):
+    def test_valid_entry_no_warnings(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_matrix_entry
+        entry = {"model_name": "test-model", "deployable": True}
+        self.assertEqual(_validate_matrix_entry(entry), [])
+
+    def test_missing_model_name(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_matrix_entry
+        entry = {"deployable": True}
+        warnings = _validate_matrix_entry(entry)
+        self.assertTrue(any("model_name" in w for w in warnings))
+
+    def test_missing_deployable(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_matrix_entry
+        entry = {"model_name": "test"}
+        warnings = _validate_matrix_entry(entry)
+        self.assertTrue(any("deployable" in w for w in warnings))
+
+    def test_wrong_type_model_name(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_matrix_entry
+        entry = {"model_name": 123, "deployable": True}
+        warnings = _validate_matrix_entry(entry)
+        self.assertTrue(any("str" in w for w in warnings))
+
+    def test_wrong_type_deployable(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_matrix_entry
+        entry = {"model_name": "test", "deployable": "yes"}
+        warnings = _validate_matrix_entry(entry)
+        self.assertTrue(any("bool" in w for w in warnings))
+
+    def test_validate_matrix_logs_warnings(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_deployment_matrix
+        matrix = [
+            {"model_name": "good", "deployable": True},
+            {"deployable": False},
+            "not-a-dict",
+        ]
+        log: list[str] = []
+        with unittest.mock.patch("builtins.print"):
+            _validate_deployment_matrix(matrix, log)
+        warning_lines = [l for l in log if "MATRIX_WARN" in l]
+        self.assertGreaterEqual(len(warning_lines), 2)
+
+    def test_fully_valid_matrix_no_warnings(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_deployment_matrix
+        matrix = [
+            {"model_name": "a", "deployable": True},
+            {"model_name": "b", "deployable": False},
+        ]
+        log: list[str] = []
+        with unittest.mock.patch("builtins.print"):
+            _validate_deployment_matrix(matrix, log)
+        warning_lines = [l for l in log if "MATRIX_WARN" in l]
+        self.assertEqual(len(warning_lines), 0)
 
 
 if __name__ == "__main__":

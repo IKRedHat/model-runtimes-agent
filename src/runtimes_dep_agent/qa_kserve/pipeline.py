@@ -287,6 +287,34 @@ def _load_deployment_matrix(matrix_path: Path) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def _validate_matrix_entry(entry: dict) -> list[str]:
+    """Return list of validation warnings for a single matrix entry."""
+    warnings: list[str] = []
+    if not isinstance(entry, dict):
+        return ["entry is not a dict"]
+    if "model_name" not in entry:
+        warnings.append("missing 'model_name'")
+    elif not isinstance(entry["model_name"], str):
+        warnings.append(f"'model_name' is {type(entry['model_name']).__name__}, expected str")
+    if "deployable" not in entry:
+        warnings.append("missing 'deployable'")
+    elif not isinstance(entry["deployable"], bool):
+        warnings.append(f"'deployable' is {type(entry['deployable']).__name__}, expected bool")
+    return warnings
+
+
+def _validate_deployment_matrix(matrix: list, log: list[str]) -> None:
+    """Log warnings for invalid matrix entries (non-blocking for backward compat)."""
+    for i, entry in enumerate(matrix):
+        if not isinstance(entry, dict):
+            _append_report(log, f"MATRIX_WARN: entry[{i}] is not a dict, skipping")
+            continue
+        issues = _validate_matrix_entry(entry)
+        for w in issues:
+            name = entry.get("model_name", f"entry[{i}]")
+            _append_report(log, f"MATRIX_WARN: {name}: {w}")
+
+
 def _load_generated_modelcar(repo_root: Path) -> dict:
     gen = repo_root / "config-yaml" / "sample_modelcar_config.generated.yaml"
     base = repo_root / "config-yaml" / "sample_modelcar_config.base.yaml"
@@ -387,6 +415,7 @@ def run_kserve_deployment_qa(
 
     matrix_path = (info_dir / "deployment_matrix.json") if info_dir else root / "info" / "deployment_matrix.json"
     matrix = _load_deployment_matrix(matrix_path)
+    _validate_deployment_matrix(matrix, log)
     deployable_names = {
         e["model_name"]
         for e in matrix
