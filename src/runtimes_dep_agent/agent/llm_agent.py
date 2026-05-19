@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 import logging
 import json
@@ -9,6 +10,7 @@ import os
 from pathlib import Path
 
 from langchain.agents import create_agent
+from langchain_core.tools import tool as lc_tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .specialists import SpecialistSpec
@@ -22,6 +24,30 @@ from ..utils.path_utils import detect_repo_root
 
 
 logger = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------ #
+# Auth-failure detection
+# ------------------------------------------------------------------ #
+
+_AUTH_FAILURE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(kw, re.IGNORECASE)
+    for kw in (
+        r"unauthorized",
+        r"forbidden",
+        r"cluster login failed",
+        r"unable to reach cluster",
+        r"tls handshake",
+        r"cannot connect",
+        r"connection refused",
+        r"authentication failed",
+    )
+]
+
+
+def _accelerator_indicates_auth_failure(text: str) -> bool:
+    """Return True when *text* contains keywords signalling cluster auth/connectivity failure."""
+    return any(pat.search(text) for pat in _AUTH_FAILURE_PATTERNS)
 
 
 
@@ -44,6 +70,7 @@ class LLMAgent:
             temperature=0,
         )
 
+        self._cluster_auth_ok: bool = True
         self.precomputed_requirements = None
         self.bootstrap_config_path: Path | None = None
         if bootstrap_config:
@@ -116,6 +143,64 @@ class LLMAgent:
 
     def _create_supervisor(self):
         tools = [spec.tool for spec in self.specialists]
+
+        # -------------------------------------------------------------- #
+        # Wrap accelerator & QA tools for programmatic auth-failure guard #
+        # -------------------------------------------------------------- #
+        agent_ref = self  # capture for closures
+
+        for idx, t in enumerate(tools):
+            if getattr(t, "name", None) == "analyze_accelerator":
+                original_accel = t
+
+                @lc_tool
+                def analyze_accelerator(request: str) -> str:  # noqa: E303
+                    """Delegate accelerator and GPU validation requests to the accelerator specialist.
+                    Always return the JSON output from get_accelerator_metadata_json() to the Supervisor.
+                    """
+                    result = original_accel.invoke({"request": request})
+                    if _accelerator_indicates_auth_failure(str(result)):
+                        agent_ref._cluster_auth_ok = False
+                        logger.warning(
+                            "Accelerator output indicates auth/connectivity failure; "
+                            "QA will be blocked."
+                        )
+                    return result
+
+                analyze_accelerator.name = "analyze_accelerator"  # type: ignore[attr-defined]
+                tools[idx] = analyze_accelerator
+                logger.debug("Wrapped analyze_accelerator tool with auth-failure guard.")
+
+            elif getattr(t, "name", None) == "analyze_qa_results":
+                original_qa = t
+
+                @lc_tool
+                def analyze_qa_results(  # noqa: E303
+                    request: str, runtime_image: str, gpu_provider: str,
+                ) -> str:
+                    """Supervisor-facing entrypoint. Pass:
+                        - request: e.g. "Run QA and summarize validation results."
+                        - runtime_image: vLLM runtime image (from accelerator JSON / VLLM_RUNTIME_IMAGE).
+                        - gpu_provider: e.g. NVIDIA or AMD.
+                    """
+                    if not agent_ref._cluster_auth_ok:
+                        msg = (
+                            "QA_ERROR:CLUSTER_AUTH_FAILED Accelerator reported "
+                            "authentication/connectivity failure; QA skipped."
+                        )
+                        logger.warning(msg)
+                        return msg
+                    return original_qa.invoke(
+                        {
+                            "request": request,
+                            "runtime_image": runtime_image,
+                            "gpu_provider": gpu_provider,
+                        }
+                    )
+
+                analyze_qa_results.name = "analyze_qa_results"  # type: ignore[attr-defined]
+                tools[idx] = analyze_qa_results
+                logger.debug("Wrapped analyze_qa_results tool with auth-failure guard.")
 
         runtime_image = os.environ.get("VLLM_RUNTIME_IMAGE", "")
 
