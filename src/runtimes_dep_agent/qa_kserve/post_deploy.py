@@ -24,7 +24,7 @@ _V4_SSRF_NETWORKS: tuple[ipaddress.IPv4Network, ...] = (
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("169.254.169.254/32"),
-    ipaddress.ip_network("0.0.0.0/32"),
+    ipaddress.ip_network("0.0.0.0/8"),
 )
 _V6_SSRF_NETWORKS: tuple[ipaddress.IPv6Network, ...] = (
     ipaddress.ip_network("::1/128"),
@@ -32,6 +32,16 @@ _V6_SSRF_NETWORKS: tuple[ipaddress.IPv6Network, ...] = (
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("::ffff:0:0/96"),
 )
+
+# Kubernetes and cloud metadata hostnames that must never be contacted by
+# post-deploy smoke tests — prevents SSRF to cluster-internal services.
+_BLOCKED_K8S_HOSTNAMES: frozenset[str] = frozenset({
+    "kubernetes",
+    "kubernetes.default",
+    "kubernetes.default.svc",
+    "kubernetes.default.svc.cluster.local",
+    "metadata.google.internal",
+})
 
 
 def _ipv4_ssrf_blocked(addr: ipaddress.IPv4Address) -> bool:
@@ -66,11 +76,19 @@ def _inference_url_ssrf_block_reason(url: str) -> str | None:
     if not host:
         return "Blocked URL: missing hostname"
 
+    # Block known K8s internal and cloud metadata hostnames
+    if host in _BLOCKED_K8S_HOSTNAMES or host.endswith(".svc.cluster.local") or host.endswith(".svc"):
+        return f"Blocked: K8s/cloud internal hostname {host!r}"
+
     offenders: list[str] = []
+    old_timeout = socket.getdefaulttimeout()
     try:
+        socket.setdefaulttimeout(5.0)
         infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     except socket.gaierror as e:
         return f"Blocked: DNS resolution failed for {host!r}: {e}"
+    finally:
+        socket.setdefaulttimeout(old_timeout)
 
     if not infos:
         return f"Blocked: no DNS results for {host!r}"

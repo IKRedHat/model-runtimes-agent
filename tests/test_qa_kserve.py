@@ -369,5 +369,35 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
 
 
+class TestSsrfK8sDnsBlock(unittest.TestCase):
+    """SSRF blocklist must cover K8s internal DNS and broader zero-network."""
+
+    def test_ssrf_blocks_zero_network_broader(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+        # 0.0.0.1 was not blocked by /32 but should be blocked by /8
+        msg = _inference_url_ssrf_block_reason("http://0.0.0.1")
+        self.assertIsNotNone(msg)
+
+    def test_ssrf_blocks_k8s_default(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+        msg = _inference_url_ssrf_block_reason("https://kubernetes.default.svc")
+        self.assertIsNotNone(msg)
+        self.assertIn("K8s", msg)
+
+    def test_ssrf_blocks_k8s_cluster_local(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+        msg = _inference_url_ssrf_block_reason("https://my-svc.ns.svc.cluster.local")
+        self.assertIsNotNone(msg)
+
+    def test_ssrf_blocks_metadata_google(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+        msg = _inference_url_ssrf_block_reason("http://metadata.google.internal")
+        self.assertIsNotNone(msg)
+
+    def test_ssrf_allows_public_url(self) -> None:
+        from runtimes_dep_agent.qa_kserve.post_deploy import _inference_url_ssrf_block_reason
+        self.assertIsNone(_inference_url_ssrf_block_reason("https://example.com"))
+
+
 if __name__ == "__main__":
     unittest.main()
