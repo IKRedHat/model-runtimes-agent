@@ -15,6 +15,31 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
+# Patterns that resemble prompt injection attempts in log/event context.
+# These are stripped from context fields before sending to the LLM to reduce
+# the risk of attacker-controlled pod logs manipulating remediation output.
+_INJECTION_PATTERNS = re.compile(
+    r"(?i)"
+    r"(?:ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions)"
+    r"|(?:you\s+are\s+now\s+)"
+    r"|(?:disregard\s+(?:all\s+)?(?:previous|prior|above)\s+)"
+    r"|(?:system\s*:\s*)"
+    r"|(?:<\s*/?\s*system\s*>)"
+    r"|(?:assistant\s*:\s*)"
+    r"|(?:<\s*/?\s*assistant\s*>)",
+)
+
+
+def _sanitize_context(text: str, max_len: int = 8000) -> str:
+    """Strip instruction-like injection patterns and truncate with marker."""
+    if not text:
+        return ""
+    cleaned = _INJECTION_PATTERNS.sub("[REDACTED]", text)
+    if len(cleaned) > max_len:
+        return cleaned[:max_len] + "\n... [truncated]"
+    return cleaned
+
+
 # Conservative Kubernetes-style resource.Quantity: digits + optional fraction,
 # optional suffix (CPU n/u/m or binary SI Ki..Ei or decimal SI K..P).
 _K8S_QTY_WHITELIST = re.compile(
@@ -191,10 +216,18 @@ def propose_remediation(
         f"max_gpu_allowed: {context.get('max_gpu_allowed')}",
         f"current_args_json: {context.get('current_args_json')}",
         f"current_resources_json: {context.get('current_resources_json')}",
-        "--- pod_json_excerpt ---\n" + str(context.get("pod_json_excerpt") or "")[:8000],
-        "--- events_tail ---\n" + str(context.get("events_tail") or "")[:6000],
-        "--- logs storage-initializer ---\n" + str(context.get("logs_storage_initializer") or "")[:6000],
-        "--- logs kserve-container ---\n" + str(context.get("logs_kserve_container") or "")[:6000],
+        "--- pod_json_excerpt ---\n<context>\n"
+        + _sanitize_context(str(context.get("pod_json_excerpt") or ""), 8000)
+        + "\n</context>",
+        "--- events_tail ---\n<context>\n"
+        + _sanitize_context(str(context.get("events_tail") or ""), 6000)
+        + "\n</context>",
+        "--- logs storage-initializer ---\n<context>\n"
+        + _sanitize_context(str(context.get("logs_storage_initializer") or ""), 6000)
+        + "\n</context>",
+        "--- logs kserve-container ---\n<context>\n"
+        + _sanitize_context(str(context.get("logs_kserve_container") or ""), 6000)
+        + "\n</context>",
     ]
     human_msg = "\n\n".join(user_parts)
 
@@ -240,4 +273,5 @@ __all__ = [
     "propose_remediation",
     "validate_and_build_plan",
     "parse_llm_json",
+    "_sanitize_context",
 ]
