@@ -33,6 +33,8 @@ BLOCKED_OC_FLAGS = frozenset(
         "--raw",
         "--exec",
         "-it",
+        "-i",
+        "-t",
         "--tty",
         "--stdin",
         "--rm",

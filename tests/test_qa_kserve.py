@@ -284,6 +284,14 @@ class TestOcFlagBlocklist(unittest.TestCase):
         with self.assertRaises(ValueError):
             oc_cli.run_oc(["get", "-it", "pod/x"])
 
+    def test_rejects_split_interactive_flags(self) -> None:
+        with self.assertRaises(ValueError):
+            oc_cli.run_oc(["get", "-i", "-t", "pod/x"])
+
+    def test_rejects_standalone_stdin_short_flag(self) -> None:
+        with self.assertRaises(ValueError):
+            oc_cli.run_oc(["get", "-i", "pod/x"])
+
     @unittest.mock.patch("subprocess.run")
     def test_allows_safe_flags(self, mock_run: unittest.mock.MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
