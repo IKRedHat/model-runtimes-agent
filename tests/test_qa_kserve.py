@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import subprocess
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -260,6 +262,33 @@ class TestOcAllowlist(unittest.TestCase):
     def test_rejects_unknown(self) -> None:
         with self.assertRaises(ValueError):
             oc_cli.run_oc(["exec", "pod", "x"])
+
+
+class TestOcFlagBlocklist(unittest.TestCase):
+    """Dangerous flags must be rejected even when the subcommand is allowed."""
+
+    def test_rejects_raw_flag(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            oc_cli.run_oc(["get", "--raw", "/api/v1/secrets"])
+        self.assertIn("--raw", str(ctx.exception))
+
+    def test_rejects_raw_flag_with_value(self) -> None:
+        with self.assertRaises(ValueError):
+            oc_cli.run_oc(["get", "--raw=/api/v1/secrets"])
+
+    def test_rejects_exec_flag(self) -> None:
+        with self.assertRaises(ValueError):
+            oc_cli.run_oc(["get", "--exec", "sh"])
+
+    def test_rejects_tty_flag(self) -> None:
+        with self.assertRaises(ValueError):
+            oc_cli.run_oc(["get", "-it", "pod/x"])
+
+    @unittest.mock.patch("subprocess.run")
+    def test_allows_safe_flags(self, mock_run: unittest.mock.MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        oc_cli.run_oc(["get", "pods", "-n", "default", "-o", "json"])
+        mock_run.assert_called_once()
 
 
 class TestRemediationJson(unittest.TestCase):
