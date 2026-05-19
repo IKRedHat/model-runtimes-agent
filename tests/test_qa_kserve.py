@@ -369,5 +369,37 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
 
 
+class TestNameCollisionDetection(unittest.TestCase):
+    def test_no_collision_unchanged(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _deduplicate_isvc_names
+        entries = [("model-a", "model-a"), ("model-b", "model-b")]
+        result = _deduplicate_isvc_names(entries)
+        self.assertEqual(result["model-a"], "model-a")
+        self.assertEqual(result["model-b"], "model-b")
+
+    def test_collision_adds_suffix(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _deduplicate_isvc_names
+        entries = [("model_1", "model-1"), ("model-1", "model-1")]
+        result = _deduplicate_isvc_names(entries)
+        self.assertEqual(result["model_1"], "model-1")
+        self.assertEqual(result["model-1"], "model-1-1")
+
+    def test_triple_collision(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _deduplicate_isvc_names
+        entries = [("a_b", "a-b"), ("a-b", "a-b"), ("a!b", "a-b")]
+        result = _deduplicate_isvc_names(entries)
+        names = sorted(result.values())
+        self.assertEqual(len(set(names)), 3)
+        self.assertIn("a-b", names)
+        self.assertIn("a-b-1", names)
+        self.assertIn("a-b-2", names)
+
+    def test_single_entry_no_suffix(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _deduplicate_isvc_names
+        entries = [("only-model", "only-model")]
+        result = _deduplicate_isvc_names(entries)
+        self.assertEqual(result["only-model"], "only-model")
+
+
 if __name__ == "__main__":
     unittest.main()

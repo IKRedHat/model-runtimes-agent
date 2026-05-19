@@ -319,6 +319,22 @@ def _gpu_count_from_entry(entry: dict) -> int:
     return 1
 
 
+def _deduplicate_isvc_names(entries: list[tuple[str, str]]) -> dict[str, str]:
+    """Map model_name -> unique isvc_name, appending suffix for sanitized-name collisions."""
+    seen: dict[str, list[str]] = {}
+    for model_name, sanitized in entries:
+        seen.setdefault(sanitized, []).append(model_name)
+
+    result: dict[str, str] = {}
+    for sanitized, model_names in seen.items():
+        if len(model_names) == 1:
+            result[model_names[0]] = sanitized
+        else:
+            for i, mn in enumerate(model_names):
+                result[mn] = f"{sanitized}-{i}" if i > 0 else sanitized
+    return result
+
+
 def run_kserve_deployment_qa(
     *,
     runtime_image: str,
@@ -469,6 +485,9 @@ def run_kserve_deployment_qa(
 
     template_text = load_inference_template(root)
 
+    name_pairs = [(e.get("name") or "unknown", sanitize_k8s_name(str(e.get("name") or "unknown"))) for e, _ in enriched]
+    isvc_name_map = _deduplicate_isvc_names(name_pairs)
+
     outcomes: list[str] = []
     for entry, _sz in enriched:
         model_name = entry.get("name") or "unknown"
@@ -482,7 +501,7 @@ def run_kserve_deployment_qa(
         if isinstance(sa, dict):
             args = list(sa.get("args") or [])
 
-        isvc_name = sanitize_k8s_name(str(model_name))
+        isvc_name = isvc_name_map.get(model_name, sanitize_k8s_name(str(model_name)))
         _qa_progress("QA_MODEL_START", model_name, isvc_name)
         gpu_n = _gpu_count_from_entry(entry)
         if gpu_provider.upper() in ("CPU", "NONE", ""):
