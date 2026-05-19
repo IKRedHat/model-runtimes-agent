@@ -1,11 +1,21 @@
 """
 Legacy post-pass for LLM-authored deployment matrices.
 
-Deployability is now computed deterministically by ``deployability_engine`` and written
-by ``deployability_decision``; the HTML report no longer applies this reconcile by default.
+.. warning:: **Test-only legacy module -- not imported by any production code path.**
 
-These helpers remain for tests and optional callers that still need to flip historical
-FP8 false negatives when gpu_info.txt proves Hopper/Ada-class hardware.
+   Deployability is now computed deterministically by ``deployability_engine`` and
+   written by ``deployability_decision``; the HTML report no longer applies this
+   reconcile by default.  This module is retained solely so that the existing
+   ``tests/test_deployability_reconcile.py`` test suite continues to pass.  It is
+   **not** imported or called from any production entry point, CLI command, or
+   pipeline stage.
+
+   Do **not** add new production imports of this module.  All GPU-family inference
+   and FP8-capability logic should live in ``deployability_engine``.
+
+These helpers remain for backward-compatible tests and optional callers that still
+need to flip historical FP8 false negatives when gpu_info.txt proves Hopper/Ada-class
+hardware.
 """
 
 from __future__ import annotations
