@@ -13,6 +13,8 @@ from kubernetes.utils.quantity import parse_quantity
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from .constants import max_gpu_allowed
+
 logger = logging.getLogger(__name__)
 
 # Conservative Kubernetes-style resource.Quantity: digits + optional fraction,
@@ -34,14 +36,6 @@ class RemediationPlan:
     cpu_limit: str
     memory_limit: str
     gpu_count: int
-
-
-def _default_max_gpu() -> int:
-    raw = os.environ.get("QA_MAX_GPU_COUNT", "8").strip()
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        return 8
 
 
 def _clamp_gpu(n: int, cap: int) -> int:
@@ -221,7 +215,7 @@ def propose_remediation(
 
         plan = validate_and_build_plan(
             raw,
-            max_gpu=int(context.get("max_gpu_allowed") or _default_max_gpu()),
+            max_gpu=int(context.get("max_gpu_allowed") or max_gpu_allowed()),
             fallback_args=list(fallback_args),
             fallback_cpu_req=fallback_cpu_req,
             fallback_mem_req=fallback_mem_req,

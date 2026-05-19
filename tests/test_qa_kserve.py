@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,31 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestSharedConstants(unittest.TestCase):
+    """Shared max_gpu_allowed must be configurable via env var."""
+
+    def test_default_returns_eight(self) -> None:
+        from runtimes_dep_agent.qa_kserve.constants import max_gpu_allowed
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("QA_MAX_GPU_COUNT", None)
+            self.assertEqual(max_gpu_allowed(), 8)
+
+    def test_env_override(self) -> None:
+        from runtimes_dep_agent.qa_kserve.constants import max_gpu_allowed
+        with unittest.mock.patch.dict(os.environ, {"QA_MAX_GPU_COUNT": "4"}):
+            self.assertEqual(max_gpu_allowed(), 4)
+
+    def test_invalid_env_falls_back(self) -> None:
+        from runtimes_dep_agent.qa_kserve.constants import max_gpu_allowed
+        with unittest.mock.patch.dict(os.environ, {"QA_MAX_GPU_COUNT": "abc"}):
+            self.assertEqual(max_gpu_allowed(), 8)
+
+    def test_negative_clamped_to_zero(self) -> None:
+        from runtimes_dep_agent.qa_kserve.constants import max_gpu_allowed
+        with unittest.mock.patch.dict(os.environ, {"QA_MAX_GPU_COUNT": "-5"}):
+            self.assertEqual(max_gpu_allowed(), 0)
 
 
 if __name__ == "__main__":

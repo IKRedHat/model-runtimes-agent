@@ -24,6 +24,7 @@ from .post_deploy import (
     post_chat_completions_smoke,
     resolve_inference_base_url,
 )
+from .constants import max_gpu_allowed
 from .remediation_llm import propose_remediation
 from .render import (
     build_registry_secret_yaml,
@@ -269,14 +270,6 @@ def _pod_json_excerpt(isvc_name: str, log: list[str], *, max_chars: int = 12000)
         return ""
     raw = (r.stdout or "").strip()
     return raw[:max_chars]
-
-
-def _max_gpu_allowed() -> int:
-    raw = os.environ.get("QA_MAX_GPU_COUNT", "8").strip()
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        return 8
 
 
 def _load_deployment_matrix(matrix_path: Path) -> list[dict]:
@@ -635,7 +628,7 @@ def run_kserve_deployment_qa(
             if llm is not None:
                 pod_excerpt = _pod_json_excerpt(isvc_name, log)
                 events_tail = _fetch_recent_events(log)
-                max_g = _max_gpu_allowed()
+                max_g = max_gpu_allowed()
                 ctx = {
                     "model_name": model_name,
                     "isvc_name": isvc_name,
