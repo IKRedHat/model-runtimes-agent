@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Subcommands permitted for automated cluster operations.
 ALLOWED_OC_SUBCOMMANDS = frozenset(
     {
+        "auth",
         "get",
         "apply",
         "create",

@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import subprocess
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,39 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestKubeconfigValidation(unittest.TestCase):
+    """Early cluster access validation before model deployment loop."""
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.pipeline.run_oc")
+    def test_cluster_access_valid(self, mock_oc) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_cluster_access
+        mock_oc.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="yes\n", stderr=""
+        )
+        log: list[str] = []
+        self.assertTrue(_validate_cluster_access(log))
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.pipeline.run_oc")
+    def test_cluster_access_denied(self, mock_oc) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_cluster_access
+        mock_oc.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="no\n", stderr=""
+        )
+        log: list[str] = []
+        self.assertFalse(_validate_cluster_access(log))
+        self.assertTrue(any("CLUSTER_ACCESS_DENIED" in l for l in log))
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.pipeline.run_oc")
+    def test_cluster_access_error(self, mock_oc) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _validate_cluster_access
+        mock_oc.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="error: cluster unreachable"
+        )
+        log: list[str] = []
+        self.assertFalse(_validate_cluster_access(log))
+        self.assertTrue(any("CLUSTER_ACCESS_FAILED" in l for l in log))
 
 
 if __name__ == "__main__":

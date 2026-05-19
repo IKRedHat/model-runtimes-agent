@@ -54,6 +54,29 @@ def _kubeconfig_path() -> Path:
     return Path(os.environ.get("KUBECONFIG", os.path.expanduser("~/.kube/config")))
 
 
+def _validate_cluster_access(log: list[str]) -> bool:
+    """Early check that cluster credentials are valid and can manage namespaces.
+
+    Runs 'oc auth can-i create namespaces' to detect auth failures before
+    entering the model deployment loop, where failures are harder to diagnose.
+    """
+    r = run_oc(["auth", "can-i", "create", "namespaces"], timeout=30)
+    if r.returncode != 0:
+        _append_report(
+            log,
+            f"QA_ERROR:CLUSTER_ACCESS_FAILED oc auth can-i failed: {(r.stderr or r.stdout or '').strip()[:300]}",
+        )
+        return False
+    stdout = (r.stdout or "").strip().lower()
+    if stdout != "yes":
+        _append_report(
+            log,
+            f"QA_ERROR:CLUSTER_ACCESS_DENIED Cannot create namespaces (oc auth can-i returned: {r.stdout!r})",
+        )
+        return False
+    return True
+
+
 def _append_report(parts: list[str], msg: str) -> None:
     parts.append(msg)
     print(f"[QA] {msg}", flush=True)
@@ -360,6 +383,9 @@ def run_kserve_deployment_qa(
         msg = f"QA_ERROR:KUBECONFIG_MISSING {kc}"
         _append_report(log, msg)
         return msg
+
+    if not _validate_cluster_access(log):
+        return _return_last_qa_error(log)
 
     if not eff_registry:
         msg = "QA_ERROR:REGISTRY_HOST_MISSING Set REGISTRY_HOST or pass registry_host."
