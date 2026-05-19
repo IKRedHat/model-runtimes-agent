@@ -279,6 +279,14 @@ def _max_gpu_allowed() -> int:
         return 8
 
 
+def _image_pull_retries() -> int:
+    raw = os.environ.get("QA_IMAGE_PULL_RETRIES", "1").strip()
+    try:
+        return max(0, min(5, int(raw)))
+    except ValueError:
+        return 1
+
+
 def _load_deployment_matrix(matrix_path: Path) -> list[dict]:
     if not matrix_path.exists():
         return []
@@ -504,6 +512,7 @@ def run_kserve_deployment_qa(
         resource_pick = True
         fixed_res: tuple[str, str, str, str] | None = None
         last_llm_summary = ""
+        image_pull_attempts = 0
 
         for attempt in range(max_heal_retries + 1):
             if resource_pick:
@@ -606,6 +615,16 @@ def run_kserve_deployment_qa(
                 kind = "oom"
 
             if kind == "image_pull":
+                if image_pull_attempts < _image_pull_retries():
+                    image_pull_attempts += 1
+                    logger.warning(
+                        "Image pull failure for %s (attempt %d/%d), retrying in 30s",
+                        model_name,
+                        image_pull_attempts,
+                        _image_pull_retries(),
+                    )
+                    time.sleep(30)
+                    continue
                 outcomes.append(f"{model_name}:QA_ERROR:IMAGE_PULL")
                 _qa_progress(
                     "QA_MODEL_FAIL",

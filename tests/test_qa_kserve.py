@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,31 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestImagePullRetry(unittest.TestCase):
+    """Tests for _image_pull_retries() helper."""
+
+    def test_default_image_pull_retries(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _image_pull_retries
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("QA_IMAGE_PULL_RETRIES", None)
+            self.assertEqual(_image_pull_retries(), 1)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_IMAGE_PULL_RETRIES": "3"})
+    def test_env_override_image_pull_retries(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _image_pull_retries
+        self.assertEqual(_image_pull_retries(), 3)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_IMAGE_PULL_RETRIES": "-2"})
+    def test_clamps_negative_to_zero(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _image_pull_retries
+        self.assertEqual(_image_pull_retries(), 0)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_IMAGE_PULL_RETRIES": "99"})
+    def test_clamps_excessive_to_five(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _image_pull_retries
+        self.assertEqual(_image_pull_retries(), 5)
 
 
 if __name__ == "__main__":
