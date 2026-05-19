@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,113 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestContainerLogResilience(unittest.TestCase):
+    def test_default_known_containers(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _known_containers
+        known = _known_containers()
+        self.assertIn("kserve-container", known)
+        self.assertIn("storage-initializer", known)
+
+    def test_default_skip_containers(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _skip_containers
+        skip = _skip_containers()
+        self.assertIn("pauser", skip)
+        self.assertIn("queue-proxy", skip)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_KNOWN_CONTAINERS": "my-runtime,my-init"})
+    def test_env_override_known_containers(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _known_containers
+        known = _known_containers()
+        self.assertEqual(known, frozenset({"my-runtime", "my-init"}))
+        self.assertNotIn("kserve-container", known)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_SKIP_CONTAINERS": "istio-proxy,envoy"})
+    def test_env_override_skip_containers(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _skip_containers
+        skip = _skip_containers()
+        self.assertEqual(skip, frozenset({"istio-proxy", "envoy"}))
+        self.assertNotIn("pauser", skip)
+
+    @unittest.mock.patch.dict(os.environ, {"QA_KNOWN_CONTAINERS": "  spaces , tabs\t"})
+    def test_strips_whitespace_in_known(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _known_containers
+        known = _known_containers()
+        self.assertEqual(known, frozenset({"spaces", "tabs"}))
+
+    @unittest.mock.patch.dict(os.environ, {"QA_KNOWN_CONTAINERS": ""})
+    def test_empty_env_uses_defaults(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _known_containers
+        known = _known_containers()
+        self.assertIn("kserve-container", known)
+
+
+class TestGpuResourceAlignment(unittest.TestCase):
+    """Verify _reconcile_llm_plan_with_provider GPU/resource decisions."""
+
+    _PLAN_RES: tuple[str, str, str, str] = ("4", "16Gi", "8", "32Gi")
+
+    def test_cpu_provider_ignores_llm_gpu_resources(self) -> None:
+        gpu_n, resource_pick, fixed_res, mem_bump = _reconcile_llm_plan_with_provider(
+            plan_gpu=2,
+            plan_resources=self._PLAN_RES,
+            gpu_provider="CPU",
+            current_mem_bump=0,
+            max_gpu=8,
+        )
+        self.assertEqual(gpu_n, 0)
+        self.assertTrue(resource_pick)
+        self.assertIsNone(fixed_res)
+        self.assertEqual(mem_bump, 1)
+
+    def test_gpu_provider_uses_llm_resources(self) -> None:
+        gpu_n, resource_pick, fixed_res, mem_bump = _reconcile_llm_plan_with_provider(
+            plan_gpu=2,
+            plan_resources=self._PLAN_RES,
+            gpu_provider="nvidia",
+            current_mem_bump=0,
+            max_gpu=8,
+        )
+        self.assertEqual(gpu_n, 2)
+        self.assertFalse(resource_pick)
+        self.assertEqual(fixed_res, self._PLAN_RES)
+        self.assertEqual(mem_bump, 0)
+
+    def test_cpu_provider_keeps_llm_args(self) -> None:
+        """serving_arguments are kept by the caller; reconcile only handles resources."""
+        gpu_n, resource_pick, fixed_res, mem_bump = _reconcile_llm_plan_with_provider(
+            plan_gpu=1,
+            plan_resources=self._PLAN_RES,
+            gpu_provider="NONE",
+            current_mem_bump=3,
+            max_gpu=4,
+        )
+        self.assertEqual(gpu_n, 0)
+        self.assertTrue(resource_pick)
+        self.assertIsNone(fixed_res)
+        self.assertEqual(mem_bump, 4)
+
+    def test_gpu_count_clamped_to_max(self) -> None:
+        gpu_n, resource_pick, fixed_res, mem_bump = _reconcile_llm_plan_with_provider(
+            plan_gpu=16,
+            plan_resources=self._PLAN_RES,
+            gpu_provider="nvidia",
+            current_mem_bump=0,
+            max_gpu=4,
+        )
+        self.assertEqual(gpu_n, 4)
+        self.assertFalse(resource_pick)
+
+    def test_empty_provider_treated_as_cpu(self) -> None:
+        gpu_n, _, _, _ = _reconcile_llm_plan_with_provider(
+            plan_gpu=2,
+            plan_resources=self._PLAN_RES,
+            gpu_provider="",
+            current_mem_bump=0,
+            max_gpu=8,
+        )
+        self.assertEqual(gpu_n, 0)
 
 
 if __name__ == "__main__":

@@ -115,6 +115,22 @@ def _delete_isvc(name: str, log: list[str]) -> None:
         time.sleep(3)
 
 
+def _known_containers() -> frozenset[str]:
+    """Container names to prefer when fetching diagnostic logs."""
+    raw = os.environ.get("QA_KNOWN_CONTAINERS", "").strip()
+    if raw:
+        return frozenset(c.strip() for c in raw.split(",") if c.strip())
+    return frozenset({"kserve-container", "storage-initializer"})
+
+
+def _skip_containers() -> frozenset[str]:
+    """Sidecar container names to skip when no known container is found."""
+    raw = os.environ.get("QA_SKIP_CONTAINERS", "").strip()
+    if raw:
+        return frozenset(c.strip() for c in raw.split(",") if c.strip())
+    return frozenset({"pauser", "queue-proxy"})
+
+
 def _fetch_pod_logs(
     isvc_name: str,
     container_hint: str,
@@ -150,7 +166,8 @@ def _fetch_pod_logs(
     if not pod_name:
         return ""
 
-    skip_containers = {"pauser", "queue-proxy"}
+    known = _known_containers()
+    skip = _skip_containers()
 
     containers = []
     for c in pod_obj.get("spec", {}).get("containers") or []:
@@ -158,12 +175,12 @@ def _fetch_pod_logs(
             containers.append(c["name"])
     target = None
     for c in containers:
-        if container_hint in c or c in {"kserve-container", "storage-initializer"}:
+        if container_hint in c or c in known:
             target = c
             break
     if target is None:
         for c in containers:
-            if c not in skip_containers:
+            if c not in skip:
                 target = c
                 break
     if target is None:
@@ -319,6 +336,22 @@ def _gpu_count_from_entry(entry: dict) -> int:
     return 1
 
 
+def _deduplicate_isvc_names(entries: list[tuple[str, str]]) -> dict[str, str]:
+    """Map model_name -> unique isvc_name, appending suffix for sanitized-name collisions."""
+    seen: dict[str, list[str]] = {}
+    for model_name, sanitized in entries:
+        seen.setdefault(sanitized, []).append(model_name)
+
+    result: dict[str, str] = {}
+    for sanitized, model_names in seen.items():
+        if len(model_names) == 1:
+            result[model_names[0]] = sanitized
+        else:
+            for i, mn in enumerate(model_names):
+                result[mn] = f"{sanitized}-{i}" if i > 0 else sanitized
+    return result
+
+
 def run_kserve_deployment_qa(
     *,
     runtime_image: str,
@@ -468,6 +501,9 @@ def run_kserve_deployment_qa(
             return _return_last_qa_error(log)
 
     template_text = load_inference_template(root)
+
+    name_pairs = [(e.get("name") or "unknown", sanitize_k8s_name(str(e.get("name") or "unknown"))) for e, _ in enriched]
+    isvc_name_map = _deduplicate_isvc_names(name_pairs)
 
     outcomes: list[str] = []
     for entry, _sz in enriched:
