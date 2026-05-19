@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import os
 import re
 from pathlib import Path
 
@@ -180,6 +181,17 @@ def format_gpu_limits_line(gpu_count: int) -> str:
     return f'          nvidia.com/gpu: "{gpu_count}"\n'
 
 
+# Memory calculation defaults for pick_cpu_memory.
+# VRAM multiplier: accounts for KV cache and runtime overhead beyond raw model weights.
+_DEFAULT_MEMORY_MULTIPLIER = 1.25
+# Fixed headroom in GiB for GPU drivers and framework overhead.
+_DEFAULT_MEMORY_OVERHEAD_GI = 2
+# Per-heal-retry memory increment in GiB (progressive resource escalation).
+_DEFAULT_HEAL_BUMP_GI = 4
+# Minimum base memory in GiB regardless of model size.
+_DEFAULT_BASE_MEMORY_GI = 8
+
+
 def pick_cpu_memory(
     *,
     required_vram_gb: float | None,
@@ -187,13 +199,32 @@ def pick_cpu_memory(
 ) -> tuple[str, str, str, str]:
     """
     Return cpu_request, memory_request, cpu_limit, memory_limit as Kubernetes quantities.
-    heal_bump increases memory tiers on retry.
+    heal_bump increases memory tiers on retry. Calculation constants are configurable
+    via QA_MEMORY_MULTIPLIER, QA_MEMORY_OVERHEAD_GI, QA_MEMORY_HEAL_BUMP_GI,
+    and QA_BASE_MEMORY_GI environment variables.
     """
-    base_mem = 8
+    try:
+        multiplier = float(os.environ.get("QA_MEMORY_MULTIPLIER", str(_DEFAULT_MEMORY_MULTIPLIER)))
+    except ValueError:
+        multiplier = _DEFAULT_MEMORY_MULTIPLIER
+    try:
+        overhead_gi = int(os.environ.get("QA_MEMORY_OVERHEAD_GI", str(_DEFAULT_MEMORY_OVERHEAD_GI)))
+    except ValueError:
+        overhead_gi = _DEFAULT_MEMORY_OVERHEAD_GI
+    try:
+        heal_gi = int(os.environ.get("QA_MEMORY_HEAL_BUMP_GI", str(_DEFAULT_HEAL_BUMP_GI)))
+    except ValueError:
+        heal_gi = _DEFAULT_HEAL_BUMP_GI
+    try:
+        base_min = int(os.environ.get("QA_BASE_MEMORY_GI", str(_DEFAULT_BASE_MEMORY_GI)))
+    except ValueError:
+        base_min = _DEFAULT_BASE_MEMORY_GI
+
+    base_mem = base_min
     if required_vram_gb is not None and required_vram_gb > 0:
-        base_mem = max(base_mem, int(required_vram_gb * 1.25) + 2 + heal_bump * 4)
+        base_mem = max(base_mem, int(required_vram_gb * multiplier) + overhead_gi + heal_bump * heal_gi)
     else:
-        base_mem = base_mem + heal_bump * 4
+        base_mem = base_mem + heal_bump * heal_gi
 
     mem_req = f"{base_mem}Gi"
     mem_lim = f"{max(base_mem * 2, base_mem + 8)}Gi"

@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,52 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestMemoryCalculation(unittest.TestCase):
+    """Memory calculation constants must be configurable via env vars."""
+
+    def test_default_values_unchanged(self) -> None:
+        """Ensure default behavior matches the original magic numbers."""
+        from runtimes_dep_agent.qa_kserve.render import pick_cpu_memory
+        cpu_req, mem_req, cpu_lim, mem_lim = pick_cpu_memory(required_vram_gb=40.0, heal_bump=0)
+        # 40 * 1.25 + 2 = 52
+        self.assertEqual(mem_req, "52Gi")
+        self.assertEqual(cpu_req, "2")
+        self.assertEqual(cpu_lim, "8")
+
+    def test_heal_bump_increment(self) -> None:
+        from runtimes_dep_agent.qa_kserve.render import pick_cpu_memory
+        _, mem0, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=0)
+        _, mem1, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=1)
+        _, mem2, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=2)
+        # Default bump is 4Gi per retry
+        m0 = int(mem0.replace("Gi", ""))
+        m1 = int(mem1.replace("Gi", ""))
+        m2 = int(mem2.replace("Gi", ""))
+        self.assertEqual(m1 - m0, 4)
+        self.assertEqual(m2 - m1, 4)
+
+    def test_custom_multiplier(self) -> None:
+        from runtimes_dep_agent.qa_kserve.render import pick_cpu_memory
+        with unittest.mock.patch.dict(os.environ, {"QA_MEMORY_MULTIPLIER": "2.0"}):
+            _, mem_req, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=0)
+        # 10 * 2.0 + 2 = 22
+        self.assertEqual(mem_req, "22Gi")
+
+    def test_custom_heal_bump(self) -> None:
+        from runtimes_dep_agent.qa_kserve.render import pick_cpu_memory
+        with unittest.mock.patch.dict(os.environ, {"QA_MEMORY_HEAL_BUMP_GI": "8"}):
+            _, mem0, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=0)
+            _, mem1, _, _ = pick_cpu_memory(required_vram_gb=10.0, heal_bump=1)
+        m0 = int(mem0.replace("Gi", ""))
+        m1 = int(mem1.replace("Gi", ""))
+        self.assertEqual(m1 - m0, 8)
+
+    def test_no_vram_uses_base(self) -> None:
+        from runtimes_dep_agent.qa_kserve.render import pick_cpu_memory
+        _, mem_req, _, _ = pick_cpu_memory(required_vram_gb=None, heal_bump=0)
+        self.assertEqual(mem_req, "8Gi")
 
 
 if __name__ == "__main__":
