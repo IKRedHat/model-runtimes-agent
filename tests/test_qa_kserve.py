@@ -6,6 +6,7 @@ import base64
 import inspect
 import json
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +368,69 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestSmokeResponseValidation(unittest.TestCase):
+    """Smoke test must reject responses that lack valid JSON or choices."""
+
+    def _mock_urlopen(self, body: str, status: int = 200):
+        """Return a context-manager mock for urllib.request.urlopen."""
+        import io
+        resp = unittest.mock.MagicMock()
+        resp.read.return_value = body.encode("utf-8")
+        resp.getcode.return_value = status
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+        return resp
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy._inference_url_ssrf_block_reason", return_value=None)
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy.urllib.request.urlopen")
+    def test_valid_response_accepted(self, mock_open, _ssrf) -> None:
+        mock_open.return_value = self._mock_urlopen(
+            json.dumps({"choices": [{"message": {"content": "ok"}}]})
+        )
+        from runtimes_dep_agent.qa_kserve.post_deploy import post_chat_completions_smoke
+        ok, _ = post_chat_completions_smoke(
+            "https://example.com", model_id="m", user_message="hi",
+            max_tokens=10, timeout_s=5, log=[],
+        )
+        self.assertTrue(ok)
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy._inference_url_ssrf_block_reason", return_value=None)
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy.urllib.request.urlopen")
+    def test_invalid_json_rejected(self, mock_open, _ssrf) -> None:
+        mock_open.return_value = self._mock_urlopen("not json at all")
+        from runtimes_dep_agent.qa_kserve.post_deploy import post_chat_completions_smoke
+        ok, detail = post_chat_completions_smoke(
+            "https://example.com", model_id="m", user_message="hi",
+            max_tokens=10, timeout_s=5, log=[],
+        )
+        self.assertFalse(ok)
+        self.assertIn("invalid JSON", detail)
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy._inference_url_ssrf_block_reason", return_value=None)
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy.urllib.request.urlopen")
+    def test_missing_choices_rejected(self, mock_open, _ssrf) -> None:
+        mock_open.return_value = self._mock_urlopen(json.dumps({"id": "x"}))
+        from runtimes_dep_agent.qa_kserve.post_deploy import post_chat_completions_smoke
+        ok, detail = post_chat_completions_smoke(
+            "https://example.com", model_id="m", user_message="hi",
+            max_tokens=10, timeout_s=5, log=[],
+        )
+        self.assertFalse(ok)
+        self.assertIn("missing", detail)
+
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy._inference_url_ssrf_block_reason", return_value=None)
+    @unittest.mock.patch("runtimes_dep_agent.qa_kserve.post_deploy.urllib.request.urlopen")
+    def test_empty_choices_rejected(self, mock_open, _ssrf) -> None:
+        mock_open.return_value = self._mock_urlopen(json.dumps({"choices": []}))
+        from runtimes_dep_agent.qa_kserve.post_deploy import post_chat_completions_smoke
+        ok, detail = post_chat_completions_smoke(
+            "https://example.com", model_id="m", user_message="hi",
+            max_tokens=10, timeout_s=5, log=[],
+        )
+        self.assertFalse(ok)
+        self.assertIn("empty", detail)
 
 
 if __name__ == "__main__":

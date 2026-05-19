@@ -271,15 +271,17 @@ def post_chat_completions_smoke(
             code = resp.getcode()
             if code != 200:
                 return False, f"HTTP {code}: {body[:500]}"
-            # Light validation: parse JSON and look for choices/content
+            # Validate response: require valid JSON with non-empty choices array
             try:
                 obj = json.loads(body)
-                choices = obj.get("choices")
-                if isinstance(choices, list) and choices:
-                    _append(log, f"smoke inference OK ({len(body)} bytes response)")
-                    return True, body[:800]
             except json.JSONDecodeError:
-                pass
+                return False, f"invalid JSON in HTTP 200 response: {body[:500]}"
+            choices = obj.get("choices")
+            if not isinstance(choices, list):
+                return False, f"response missing 'choices' array: {body[:500]}"
+            if not choices:
+                return False, f"response 'choices' array is empty: {body[:500]}"
+            _append(log, f"smoke inference OK ({len(body)} bytes response)")
             return True, body[:800]
     except urllib.error.HTTPError as e:
         err_body = (e.read() or b"").decode("utf-8", errors="replace")
