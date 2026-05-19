@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,7 +44,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-QA_NAMESPACE = "model-validation"
+def _generate_qa_namespace() -> str:
+    """Generate a per-run namespace, configurable via QA_NAMESPACE env var.
+
+    Defaults to model-validation-<8-char-uuid> for parallel-run isolation.
+    Set QA_NAMESPACE to override with a fixed name.
+    """
+    override = os.environ.get("QA_NAMESPACE", "").strip()
+    if override:
+        return override
+    return f"model-validation-{uuid.uuid4().hex[:8]}"
 
 
 def _env_truthy(name: str) -> bool:
@@ -78,10 +88,19 @@ def _qa_progress(event: str, *fields: str) -> None:
 
 
 def _ensure_namespace(namespace: str, log: list[str]) -> bool:
+    """Create namespace idempotently (safe for concurrent agents)."""
     r = run_oc(["get", "namespace", namespace], timeout=30)
     if r.returncode == 0:
         return True
-    r2 = run_oc(["create", "namespace", namespace], timeout=60)
+    # Use apply with YAML doc for idempotent creation (safe if another
+    # agent creates the namespace between our get and apply).
+    ns_yaml = (
+        "apiVersion: v1\n"
+        "kind: Namespace\n"
+        "metadata:\n"
+        f"  name: {namespace}\n"
+    )
+    r2 = run_oc(["apply", "-f", "-"], stdin_input=ns_yaml, timeout=60)
     if r2.returncode != 0:
         _append_report(log, f"QA_ERROR:NAMESPACE_FAILED {r2.stderr or r2.stdout}")
         return False
@@ -103,9 +122,9 @@ def _apply_yaml_document(doc_yaml: str, log: list[str], *, timeout: float = 120)
     return True
 
 
-def _delete_isvc(name: str, log: list[str]) -> None:
+def _delete_isvc(name: str, namespace: str, log: list[str]) -> None:
     r = run_oc(
-        ["delete", "inferenceservice", name, "-n", QA_NAMESPACE, "--ignore-not-found=true"],
+        ["delete", "inferenceservice", name, "-n", namespace, "--ignore-not-found=true"],
         timeout=180,
     )
     if r.returncode != 0:
@@ -120,6 +139,7 @@ def _fetch_pod_logs(
     container_hint: str,
     log: list[str],
     *,
+    namespace: str,
     tail_lines: int = 600,
 ) -> str:
     """Best-effort logs from first matching pod."""
@@ -128,7 +148,7 @@ def _fetch_pod_logs(
             "get",
             "pods",
             "-n",
-            QA_NAMESPACE,
+            namespace,
             "-l",
             f"serving.kserve.io/inferenceservice={isvc_name}",
             "-o",
@@ -170,7 +190,7 @@ def _fetch_pod_logs(
         return ""
 
     r2 = run_oc(
-        ["logs", pod_name, "-n", QA_NAMESPACE, "-c", target, f"--tail={tail_lines}"],
+        ["logs", pod_name, "-n", namespace, "-c", target, f"--tail={tail_lines}"],
         timeout=120,
     )
     if r2.returncode != 0:
@@ -182,6 +202,7 @@ def _fetch_pod_logs(
 def _wait_ready_or_failure(
     isvc_name: str,
     *,
+    namespace: str,
     deadline_s: float,
     poll_s: float,
     log: list[str],
@@ -192,7 +213,7 @@ def _wait_ready_or_failure(
 
     while time.monotonic() < deadline:
         r = run_oc(
-            ["get", "inferenceservice", isvc_name, "-n", QA_NAMESPACE, "-o", "json"],
+            ["get", "inferenceservice", isvc_name, "-n", namespace, "-o", "json"],
             timeout=60,
         )
         if r.returncode == 0 and r.stdout:
@@ -212,7 +233,7 @@ def _wait_ready_or_failure(
                 "get",
                 "pods",
                 "-n",
-                QA_NAMESPACE,
+                namespace,
                 "-l",
                 f"serving.kserve.io/inferenceservice={isvc_name}",
                 "-o",
@@ -230,14 +251,14 @@ def _wait_ready_or_failure(
     return False, f"timeout:{last_diag}"
 
 
-def _fetch_recent_events(log: list[str], *, max_lines: int = 80) -> str:
+def _fetch_recent_events(log: list[str], *, namespace: str, max_lines: int = 80) -> str:
     """Recent namespace events (best-effort tail)."""
     r = run_oc(
         [
             "get",
             "events",
             "-n",
-            QA_NAMESPACE,
+            namespace,
             "--sort-by=.lastTimestamp",
         ],
         timeout=90,
@@ -249,14 +270,14 @@ def _fetch_recent_events(log: list[str], *, max_lines: int = 80) -> str:
     return "\n".join(lines[-max_lines:])
 
 
-def _pod_json_excerpt(isvc_name: str, log: list[str], *, max_chars: int = 12000) -> str:
+def _pod_json_excerpt(isvc_name: str, log: list[str], *, namespace: str, max_chars: int = 12000) -> str:
     """Truncated pod list JSON for LLM / failure context."""
     r = run_oc(
         [
             "get",
             "pods",
             "-n",
-            QA_NAMESPACE,
+            namespace,
             "-l",
             f"serving.kserve.io/inferenceservice={isvc_name}",
             "-o",
@@ -350,6 +371,7 @@ def run_kserve_deployment_qa(
     Returns a string starting with QA_OK: or QA_ERROR: for downstream parsers.
     """
     log: list[str] = []
+    qa_namespace = _generate_qa_namespace()
     root = repo_root or detect_repo_root()
     eff_registry = (registry_host or os.environ.get("REGISTRY_HOST", "")).strip()
     eff_secret = (oci_pull_secret or os.environ.get("OCI_REGISTRY_PULL_SECRET", "")).strip()
@@ -424,7 +446,7 @@ def run_kserve_deployment_qa(
 
     _append_report(log, "Starting KServe deployment QA (sequential, small-to-large image).")
 
-    if not _ensure_namespace(QA_NAMESPACE, log):
+    if not _ensure_namespace(qa_namespace, log):
         return _return_last_qa_error(log)
 
     docker_b64 = normalize_dockerconfig_b64(eff_secret)
@@ -432,7 +454,7 @@ def run_kserve_deployment_qa(
         registry_host=eff_registry,
         dockerconfigjson_b64=docker_b64,
         secret_name=oci_secret_name,
-        namespace=QA_NAMESPACE,
+        namespace=qa_namespace,
     )
     if not _apply_yaml_document(secret_yaml, log):
         return _return_last_qa_error(log)
@@ -451,7 +473,7 @@ def run_kserve_deployment_qa(
             return msg
         sr_body = render_serving_runtime(
             template_text=sr_template,
-            namespace=QA_NAMESPACE,
+            namespace=qa_namespace,
             serving_runtime_name=serving_runtime,
             vllm_runtime_image=eff_runtime,
             model_format_name=model_format,
@@ -462,8 +484,8 @@ def run_kserve_deployment_qa(
             msg = f"QA_ERROR:SERVING_RUNTIME_YAML_INVALID {e}"
             _append_report(log, msg)
             return msg
-        _append_report(log, f"Applying ServingRuntime {serving_runtime} in {QA_NAMESPACE}.")
-        _qa_progress("QA_SERVING_RUNTIME_APPLY", serving_runtime, QA_NAMESPACE)
+        _append_report(log, f"Applying ServingRuntime {serving_runtime} in {qa_namespace}.")
+        _qa_progress("QA_SERVING_RUNTIME_APPLY", serving_runtime, qa_namespace)
         if not _apply_yaml_document(sr_body, log, timeout=180):
             return _return_last_qa_error(log)
 
@@ -540,7 +562,7 @@ def run_kserve_deployment_qa(
                 failure_reason = str(e)
                 break
 
-            _delete_isvc(isvc_name, log)
+            _delete_isvc(isvc_name, qa_namespace, log)
             if not _apply_yaml_document(body, log, timeout=180):
                 outcomes.append(f"{model_name}:apply_failed")
                 failure_reason = "apply_failed"
@@ -550,6 +572,7 @@ def run_kserve_deployment_qa(
 
             ready, detail = _wait_ready_or_failure(
                 isvc_name,
+                namespace=qa_namespace,
                 deadline_s=float(timeout_per),
                 poll_s=poll_interval_s,
                 log=log,
@@ -559,7 +582,7 @@ def run_kserve_deployment_qa(
                 outcomes.append(f"{model_name}:OK")
                 ok_model = True
                 _append_report(log, f"{model_name} Ready.")
-                url = resolve_inference_base_url(isvc_name, QA_NAMESPACE, log)
+                url = resolve_inference_base_url(isvc_name, qa_namespace, log)
                 _qa_progress("QA_MODEL_READY", model_name, isvc_name, url)
                 break
 
@@ -570,7 +593,7 @@ def run_kserve_deployment_qa(
                     "get",
                     "pods",
                     "-n",
-                    QA_NAMESPACE,
+                    qa_namespace,
                     "-l",
                     f"serving.kserve.io/inferenceservice={isvc_name}",
                     "-o",
@@ -587,12 +610,14 @@ def run_kserve_deployment_qa(
                 isvc_name,
                 "storage-initializer",
                 log,
+                namespace=qa_namespace,
                 tail_lines=700,
             )
             log_ks = _fetch_pod_logs(
                 isvc_name,
                 "kserve-container",
                 log,
+                namespace=qa_namespace,
                 tail_lines=700,
             )
             if log_si:
@@ -633,8 +658,8 @@ def run_kserve_deployment_qa(
             plan_summary = ""
 
             if llm is not None:
-                pod_excerpt = _pod_json_excerpt(isvc_name, log)
-                events_tail = _fetch_recent_events(log)
+                pod_excerpt = _pod_json_excerpt(isvc_name, log, namespace=qa_namespace)
+                events_tail = _fetch_recent_events(log, namespace=qa_namespace)
                 max_g = _max_gpu_allowed()
                 ctx = {
                     "model_name": model_name,
@@ -706,7 +731,7 @@ def run_kserve_deployment_qa(
 
         if ok_model:
             if not _env_truthy("QA_SKIP_POST_DEPLOY_SMOKE"):
-                base_url = resolve_inference_base_url(isvc_name, QA_NAMESPACE, log)
+                base_url = resolve_inference_base_url(isvc_name, qa_namespace, log)
                 model_id = os.environ.get("QA_SMOKE_MODEL_ID", "").strip() or isvc_name
                 user_msg = os.environ.get(
                     "QA_SMOKE_USER_MESSAGE",
@@ -764,7 +789,7 @@ def run_kserve_deployment_qa(
                             f"detail={smoke_detail[:300]}",
                         )
             if ok_model and not _env_truthy("QA_SKIP_SCALE_TO_ZERO"):
-                patch_isvc_scale_to_zero(isvc_name, QA_NAMESPACE, log)
+                patch_isvc_scale_to_zero(isvc_name, qa_namespace, log)
                 _qa_progress("QA_MODEL_SCALED_ZERO", model_name, isvc_name)
 
     bad = [
@@ -777,13 +802,13 @@ def run_kserve_deployment_qa(
         return "QA_ERROR:KSERVE_DEPLOYMENT_FAILED " + summary + "\n" + "\n".join(log)
 
     if not _env_truthy("QA_SKIP_NAMESPACE_DELETE"):
-        if not delete_namespace(QA_NAMESPACE, log):
+        if not delete_namespace(qa_namespace, log):
             return (
                 "QA_ERROR:NAMESPACE_DELETE_FAILED "
                 + summary
                 + "\n"
                 + "\n".join(log)
             )
-        _qa_progress("QA_NAMESPACE_DELETED", QA_NAMESPACE)
+        _qa_progress("QA_NAMESPACE_DELETED", qa_namespace)
 
     return "QA_OK:" + summary + "\n" + "\n".join(log)

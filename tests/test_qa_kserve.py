@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import inspect
 import json
+import os
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from runtimes_dep_agent.qa_kserve.heuristics import classify_pod_json, logs_hint_oom
@@ -367,6 +369,30 @@ class TestPipelineDefaults(unittest.TestCase):
         self.assertEqual(d, 2)
         # Loop uses range(max_heal_retries + 1) -> 3 attempts
         self.assertEqual(list(range(d + 1)), [0, 1, 2])
+
+
+class TestNamespaceIsolation(unittest.TestCase):
+    """Per-run namespace generation for parallel-safe QA."""
+
+    def test_generated_format(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _generate_qa_namespace
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("QA_NAMESPACE", None)
+            ns = _generate_qa_namespace()
+        self.assertRegex(ns, r"^model-validation-[a-f0-9]{8}$")
+
+    def test_env_override(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _generate_qa_namespace
+        with unittest.mock.patch.dict(os.environ, {"QA_NAMESPACE": "my-custom-ns"}):
+            self.assertEqual(_generate_qa_namespace(), "my-custom-ns")
+
+    def test_uniqueness(self) -> None:
+        from runtimes_dep_agent.qa_kserve.pipeline import _generate_qa_namespace
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("QA_NAMESPACE", None)
+            ns1 = _generate_qa_namespace()
+            ns2 = _generate_qa_namespace()
+        self.assertNotEqual(ns1, ns2)
 
 
 if __name__ == "__main__":
